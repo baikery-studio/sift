@@ -1,0 +1,7 @@
+SOFTWARE profile rubric (appended to the kernel base):
+- The diff must implement the packet's stated goal with a REAL test (not a
+  weakened/removed/skipped one); a test that asserts a constant or its own input
+  is reward-hacking → fail.
+- A newly added symbol must be CALLED from real code (not a dead def).
+- No sift-product invariants (workspace-context / tenancy / RLS) apply here —
+  this is the generic software profile.

@@ -1,0 +1,42 @@
+{
+  "name": "software",
+  "kernel_version": ">=0.1.0",
+  "description": "Software-delivery profile: real RED-first acceptance, keyless deterministic W3 (structural review, no network), structural anti-dormant W4 wiring witness.",
+  "task_schema": {
+    "required": [
+      "id",
+      "profile",
+      "goal",
+      "test"
+    ],
+    "optional": [
+      "wiring_symbol",
+      "wiring_min_hits"
+    ]
+  },
+  "acceptance": {
+    "runner": "shell",
+    "script": "acceptance/run.sh",
+    "sandbox": {
+      "network": "none"
+    }
+  },
+  "witnesses": {
+    "w3": {
+      "impl": "witness_w3.sh",
+      "mode": "keyless",
+      "note": "keyless deterministic structural review \u2014 no model, no network, no keys"
+    },
+    "w4": {
+      "impl": "witness_w4.sh",
+      "kind": "structural-wiring-anti-dormant"
+    }
+  },
+  "soft_floors": [
+    {
+      "category": "fresh_clone_unavailable",
+      "identifying_string": "env -i, no clone",
+      "applies_to": "w2"
+    }
+  ]
+}

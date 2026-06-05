@@ -1,0 +1,40 @@
+.harness/
+.canary/
+harness/
+__pycache__/
+*.pyc
+.omc/
+.DS_Store
+
+# dev-internal archaeology (kept on disk, not published): reviews, retired packets,
+# the comparative review, and dead eval stubs for superseded packets
+docs/reviews/
+docs/HARNESS_REVIEW.md
+tasks/packets/superseded/
+evals/snapshots/SH-*/
+evals/snapshots/WG-*/
+.claude/settings.local.json
+
+# secrets / runtime / editor (never publish)
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+*.swp
+*.swo
+*.bak
+.vscode/
+.idea/
+docs/spec/BUILD_PLAN.md
+docs/spec/MEGA_REVIEW.md
+docs/spec/profiles/
+.claude/scheduled_tasks.lock
+evals/snapshots/superseded/
+docs/DEV_PLAN_2026-06.md
+docs/ROADMAP.md
+tasks/
+evals/snapshots/
+docs/spec/SIFT_HARNESS_FAMILY.md
+docs/spec/KANBAN_ENFORCEMENT.md

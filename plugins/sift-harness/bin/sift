@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# bin/sift — fail-soft dispatch shim + pipeline router (spine).
+# Fail-soft: an unknown subcommand or a missing dependency logs to stderr and
+# exits 0 with empty stdout (never JSON) — a broken install is a no-op.
+SIFT_BIN="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+# PLUGIN root = where bin/kernel/profiles live (the installed plugin).
+# REPO  root = the working repo where packets/state/artifacts live (cwd).
+export SIFT_PLUGIN_ROOT="$(cd "$SIFT_BIN/.." && pwd)"
+export SIFT_REPO_ROOT="${SIFT_REPO_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}}"
+
+cmd="${1:-}"; [ "$#" -gt 0 ] && shift
+case "$cmd" in
+  version)     cat "$SIFT_PLUGIN_ROOT/VERSION" 2>/dev/null || echo "0.0.0-spine" ;;
+  plan|execute|review)
+               . "$SIFT_PLUGIN_ROOT/kernel/pipeline.sh"; "sift_$cmd" "$@" ;;
+  state)       . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; project_state "$@" ;;
+  status)      . "$SIFT_PLUGIN_ROOT/kernel/status.sh"; sift_status "$@" ;;
+  sync)        . "$SIFT_PLUGIN_ROOT/kernel/sync.sh"; sift_sync "$@" ;;
+  verify-log)  . "$SIFT_PLUGIN_ROOT/kernel/log.sh"; verify_log_chain ;;
+  selftest)    . "$SIFT_PLUGIN_ROOT/kernel/selftest.sh"; sift_selftest "$@" ;;
+  setup)       . "$SIFT_PLUGIN_ROOT/kernel/setup.sh"; sift_setup "$@" ;;
+  wave-review) . "$SIFT_PLUGIN_ROOT/kernel/wave.sh"; sift_wave_review "$@" ;;
+  next)        . "$SIFT_PLUGIN_ROOT/kernel/next.sh"; sift_next "$@" ;;
+  doctor)      . "$SIFT_PLUGIN_ROOT/kernel/doctor.sh"; sift_doctor "$@" ;;
+  focus)       . "$SIFT_PLUGIN_ROOT/kernel/scope_guard.sh"; sift_focus "$@" ;;
+  init-claudemd) . "$SIFT_PLUGIN_ROOT/kernel/scaffold.sh"; sift_init_claudemd "$@" ;;
+  packet)      case "${1:-}" in
+                 new)      shift; . "$SIFT_PLUGIN_ROOT/kernel/scaffold.sh"; sift_scaffold "$@" ;;
+                 validate) shift; . "$SIFT_PLUGIN_ROOT/kernel/scaffold.sh"; sift_packet_validate "$@" ;;
+                 *)        echo "[sift] usage: sift packet {new <id> [--profile P]|validate <id>}" >&2; exit 0 ;;
+               esac ;;
+  "")          echo "[sift] usage: sift {version|plan|execute|review|state|status|verify-log|selftest|setup|wave-review|next|doctor|focus|init-claudemd|packet|sync} ..." >&2; exit 0 ;;
+  *)           echo "[sift] unknown subcommand '$cmd' (fail-soft, no-op)" >&2; exit 0 ;;
+esac

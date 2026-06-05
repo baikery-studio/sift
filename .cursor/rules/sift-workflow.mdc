@@ -1,0 +1,8 @@
+---
+description: sift-harness plan→execute→review workflow (witness-bound completion)
+alwaysApply: true
+---
+Use the sift-harness loop for rigor-warranting work: scaffold a packet, produce its
+artifact, then `bash "$SIFT_HOME/bin/sift" plan|execute|review <id>` to drive it to a
+witness-bound `confirmed`. The append-only hash-chained log is the source of truth;
+do not hand-edit `.harness/`. See AGENTS.md and docs/spec/HOSTS.md (Cursor tier).

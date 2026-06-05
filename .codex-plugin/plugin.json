@@ -1,0 +1,14 @@
+{
+  "name": "sift-harness",
+  "version": "0.3.0",
+  "description": "plan→execute→review rigor for Codex CLI: hash-pinned packets, witness-bound confirmation, compaction-survival resume (scope guard is advisory on Codex — no PreToolUse hook).",
+  "license": "MIT",
+  "keywords": ["codex", "harness", "verification", "plan-work-review"],
+  "skills": "../skills/",
+  "interface": {
+    "displayName": "sift-harness",
+    "shortDescription": "Witness-bound plan→execute→review for Codex CLI",
+    "category": "Coding",
+    "capabilities": ["Read", "Write", "Interactive"]
+  }
+}

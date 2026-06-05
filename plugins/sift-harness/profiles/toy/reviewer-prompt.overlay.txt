@@ -1,0 +1,27 @@
+TOY PROFILE RUBRIC (text-artifact)
+
+This overlay is appended (plain string concatenation) to the kernel's
+domain-neutral reviewer-prompt.base.txt. The base supplies the adversarial
+framing, the fail-closed / low_confidence rule, and the output JSON schema. This
+overlay supplies ONLY the toy rubric below. It contains zero software concepts
+and zero sift-product invariants.
+
+You are given: the packet frontmatter (goal, artifact.path, artifact.marker),
+the produced artifact file, and the acceptance evidence (marker present? at
+which byte offset?).
+
+For the toy text-artifact, decide PASS or REFUTE on these checks:
+
+  T1 — MARKER PRESENT. The artifact file contains the declared artifact.marker
+       substring verbatim. If absent, REFUTE.
+
+  T2 — GOAL ADDRESSED. Read the artifact. Its content must plausibly address the
+       declared goal string. A file that contains the marker but says nothing
+       about the goal (e.g. the marker pasted into otherwise-empty or unrelated
+       text) is a marker-stuffing cheat. REFUTE for STUFFED.
+
+  T3 — NO SCOPE DRIFT. The artifact is the single declared artifact.path and
+       nothing else was produced.
+
+OUTPUT (JSON, inherited base schema): verdict pass only if T1..T3 all pass and
+confidence >= confidence_floor; otherwise fail naming the failing IDs.

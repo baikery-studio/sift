@@ -1,0 +1,32 @@
+{
+  "name": "toy",
+  "kernel_version": ">=1.0.0",
+  "task_schema": "./task-schema.json",
+  "acceptance": {
+    "runner": "shell",
+    "sandbox": {
+      "image": null,
+      "interpreter": "bash",
+      "network": "none"
+    },
+    "plan_pin": "artifact_spec"
+  },
+  "witnesses": {
+    "w3": {
+      "overlay": "./reviewer-prompt.overlay.txt",
+      "model": "claude-opus-4-8",
+      "confidence_floor": 0.7
+    },
+    "w4": {
+      "impl": "./witness_w4.sh"
+    }
+  },
+  "soft_floors": [
+    {
+      "category": "unverified_marker",
+      "identifying_string": "marker present but goal-addressing not independently confirmable",
+      "applies_to": "w4",
+      "rationale": "the required marker string is present in the artifact, but W4 could not independently confirm the artifact addresses the declared goal (e.g. goal-evidence absent). The artifact lands as partially_confirmed, never confirmed."
+    }
+  ]
+}

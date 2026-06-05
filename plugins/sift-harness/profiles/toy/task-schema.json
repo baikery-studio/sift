@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "sift-harness/profiles/toy/task-schema.json",
+  "title": "toy (text-artifact) packet frontmatter",
+  "type": "object",
+  "description": "The simplest possible NON-software profile. A toy packet declares a goal, a required output artifact, and a marker string the artifact must contain. Acceptance = the artifact exists and contains the marker. This schema is deliberately tiny and references no software concepts whatsoever; its only keys are goal and artifact.",
+  "required": ["goal", "artifact"],
+  "additionalProperties": true,
+  "properties": {
+    "goal": {
+      "type": "string",
+      "minLength": 8,
+      "description": "The single thing this artifact must accomplish. W4 measures the artifact against THIS string (semantic, not structural)."
+    },
+    "artifact": {
+      "type": "object",
+      "required": ["path", "marker"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the required output file, relative to repo root. Acceptance asserts it exists."
+        },
+        "marker": {
+          "type": "string",
+          "minLength": 1,
+          "description": "A required substring the artifact MUST contain. Acceptance asserts presence. This is what plan_pin: artifact_spec byte-pins."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,3 @@
+test: evals/snapshots/__ID__/test.sh
+wiring_symbol: TODO_symbol_defined_and_called
+wiring_min_hits: 2

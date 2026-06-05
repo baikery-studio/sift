@@ -1,0 +1,7 @@
+{
+  "name": "sift-harness",
+  "version": "0.3.0",
+  "description": "Candidate Cursor adapter for sift-harness plan→execute→review rigor.",
+  "license": "MIT",
+  "keywords": ["cursor", "harness", "verification"]
+}

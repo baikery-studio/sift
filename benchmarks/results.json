@@ -1,0 +1,151 @@
+{
+  "config": {
+    "trials": 12,
+    "tasks_per_trial": 6,
+    "defect_pct": 40,
+    "keyless": true
+  },
+  "defects": 32,
+  "unharnessed": {
+    "caught": 19,
+    "escaped": 13,
+    "catch_rate": 0.5938,
+    "escaped_per_trial": {
+      "mean": 1.083,
+      "std": 0.515
+    }
+  },
+  "harnessed": {
+    "caught": 30,
+    "escaped": 2,
+    "catch_rate": 0.9375,
+    "escaped_per_trial": {
+      "mean": 0.167,
+      "std": 0.389
+    }
+  },
+  "false_blocks": 0,
+  "classes": {
+    "D1": "premature-done (no artifact) -> W2",
+    "D2": "scope-drift (off-goal) -> W4",
+    "D3": "forged-confirm (log-only) -> trust-core",
+    "D4": "near-miss (keyless ceiling) -> ESCAPES"
+  },
+  "trials": [
+    {
+      "trial": 1,
+      "defects": 4,
+      "un_caught": 2,
+      "un_escaped": 2,
+      "ha_caught": 3,
+      "ha_escaped": 1,
+      "false_blocks": 0
+    },
+    {
+      "trial": 2,
+      "defects": 5,
+      "un_caught": 3,
+      "un_escaped": 2,
+      "ha_caught": 4,
+      "ha_escaped": 1,
+      "false_blocks": 0
+    },
+    {
+      "trial": 3,
+      "defects": 3,
+      "un_caught": 2,
+      "un_escaped": 1,
+      "ha_caught": 3,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 4,
+      "defects": 3,
+      "un_caught": 2,
+      "un_escaped": 1,
+      "ha_caught": 3,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 5,
+      "defects": 1,
+      "un_caught": 1,
+      "un_escaped": 0,
+      "ha_caught": 1,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 6,
+      "defects": 2,
+      "un_caught": 1,
+      "un_escaped": 1,
+      "ha_caught": 2,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 7,
+      "defects": 2,
+      "un_caught": 1,
+      "un_escaped": 1,
+      "ha_caught": 2,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 8,
+      "defects": 3,
+      "un_caught": 2,
+      "un_escaped": 1,
+      "ha_caught": 3,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 9,
+      "defects": 3,
+      "un_caught": 2,
+      "un_escaped": 1,
+      "ha_caught": 3,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 10,
+      "defects": 2,
+      "un_caught": 1,
+      "un_escaped": 1,
+      "ha_caught": 2,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 11,
+      "defects": 2,
+      "un_caught": 1,
+      "un_escaped": 1,
+      "ha_caught": 2,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    },
+    {
+      "trial": 12,
+      "defects": 2,
+      "un_caught": 1,
+      "un_escaped": 1,
+      "ha_caught": 2,
+      "ha_escaped": 0,
+      "false_blocks": 0
+    }
+  ],
+  "engage_gate": {
+    "trials": 12,
+    "escape_gate_off": 12,
+    "escape_gate_on": 0,
+    "escape_rate_off": 1.0,
+    "escape_rate_on": 0.0
+  }
+}

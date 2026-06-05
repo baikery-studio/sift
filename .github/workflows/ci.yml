@@ -1,0 +1,50 @@
+name: sift-harness CI
+
+# The harness judges itself. Every push/PR runs the keyless witness suite and the
+# harnessed-vs-unharnessed benchmark on BOTH Linux (bash 5) and macOS (bash 3.2),
+# proving the portability claim. No API key, no network: selftest + benchmark are
+# the deterministic-only review mode (see docs/spec/EGRESS_GOVERNANCE.md).
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    name: selftest (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2   # manifest base_sha needs HEAD~1
+      - name: bash + python versions
+        run: |
+          bash --version | head -1
+          python3 --version
+      - name: sift selftest (keyless witness suite + coverage)
+        run: ./bin/sift selftest
+      - name: trust-log chain verification
+        # No `|| true`: an empty/absent log verifies as "chain ok: 0 events" (exit 0),
+        # so a non-zero exit here means a REAL tamper (exit 20-23) and must fail CI.
+        run: ./bin/sift verify-log
+
+  benchmark:
+    name: benchmark (harnessed vs unharnessed)
+    runs-on: ubuntu-latest
+    needs: selftest
+    steps:
+      - uses: actions/checkout@v4
+      - name: harnessed-vs-unharnessed benchmark (n=12, keyless)
+        run: bash benchmarks/bench.sh
+      - name: publish benchmark result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmarks/results.json

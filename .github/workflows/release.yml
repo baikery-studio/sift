@@ -1,0 +1,54 @@
+name: release
+
+# Minimal tag -> GitHub Release. A `v*` tag whose value matches VERSION publishes a
+# GitHub Release with auto-generated notes. This is the honest minimal middle: NO
+# artifact signing yet — that remains planned (see docs/spec/CICD.md section 5).
+
+on:
+  push:
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # only what `gh release create` needs
+
+jobs:
+  # the harness judges its own releases: a tag on a red commit must NOT publish.
+  selftest:
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ ubuntu-latest, macos-latest ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: sift selftest (keyless) + trust-log verify
+        run: |
+          ./bin/sift selftest
+          ./bin/sift verify-log
+
+  release:
+    needs: selftest          # gate: no green selftest on both OSes -> no release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: assert tag matches VERSION (lockstep)
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver="$(cat VERSION)"
+          if [ "$tag" != "$ver" ]; then
+            echo "tag v$tag does not match VERSION ($ver) — refusing to release" >&2
+            exit 1
+          fi
+          echo "tag matches VERSION ($ver)"
+      - name: create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes

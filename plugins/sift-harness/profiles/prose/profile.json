@@ -1,0 +1,12 @@
+{
+  "name": "prose",
+  "kernel_version": ">=0.1.0",
+  "description": "Prose-delivery profile: reviews a WRITING deliverable (declared sections present), not code. Keyless deterministic W3, semantic W4 (goal-addressed = all sections present). Exists to prove the kernel/profile seam at a non-code task with zero kernel edits.",
+  "task_schema": { "required": ["id", "profile", "goal", "artifact"], "optional": [] },
+  "acceptance": { "runner": "shell", "script": "acceptance/run.sh", "sandbox": { "network": "none" } },
+  "witnesses": {
+    "w3": { "impl": "witness_w3.sh", "mode": "deterministic-keyless" },
+    "w4": { "impl": "witness_w4.sh", "kind": "semantic-sections-present" }
+  },
+  "soft_floors": []
+}

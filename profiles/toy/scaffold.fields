@@ -1,0 +1,3 @@
+artifact:
+  path: out/__ID__.txt
+  marker: __ID__-OK
