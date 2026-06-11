@@ -57,6 +57,19 @@ def cmd_append(log_path):
         fcntl.flock(lf, fcntl.LOCK_EX)
         try:
             lines = _read_events(log_path)
+            # Torn-last-line repair: a crash mid-append can leave a partial JSON line.
+            # Quarantine it (record to <log>.quarantine + drop) and rewrite the log so a
+            # single torn tail never permanently bricks all future appends. LAST line only.
+            if lines:
+                try:
+                    json.loads(lines[-1])
+                except Exception:
+                    torn = lines.pop()
+                    with open(log_path + ".quarantine", "a") as q:
+                        q.write("torn-tail-quarantined\t" + torn + "\n")
+                    with open(log_path, "w") as f:
+                        if lines:
+                            f.write("\n".join(lines) + "\n")
             if lines:
                 last = json.loads(lines[-1])
                 seq = last["seq"] + 1
