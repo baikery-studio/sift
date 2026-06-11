@@ -3,7 +3,7 @@ name: sift-harness CI
 # The harness judges itself. Every push/PR runs the keyless witness suite and the
 # harnessed-vs-unharnessed benchmark on BOTH Linux (bash 5) and macOS (bash 3.2),
 # proving the portability claim. No API key, no network: selftest + benchmark are
-# the deterministic-only review mode (see docs/spec/EGRESS_GOVERNANCE.md).
+# the deterministic-only review mode (sift makes no network calls — see SECURITY.md).
 
 on:
   push:
