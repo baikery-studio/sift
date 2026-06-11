@@ -1,9 +1,13 @@
 # sift audit — second-party replay-verification
 
 `sift audit <packet_id>` lets a party who did **not** build the work verify a
-`confirmed` claim from the repository alone. It is the capability the architecture is
-closest to serving (regulated / multi-party hand-off) and the one a self-asserted
-"done" cannot offer.
+`confirmed` claim from the repo plus the retained trust artifacts (the hash-chained log
+and the witness reviews). It is the capability the architecture is closest to serving
+(regulated / multi-party hand-off) and the one a self-asserted "done" cannot offer.
+
+Note that `.harness/log.jsonl` and `.harness/reviews/` are gitignored by default, so a
+plain `git clone` does **not** carry them. Audit is not "from a bare clone" — the
+operator must ship or retain those artifacts (see *What a second party needs*).
 
 ## What it checks
 
@@ -41,3 +45,21 @@ The witness evidence records `feature_sha` (the commit the work was reviewed aga
 and the W3 artifact hash, so a PASS resolves to a specific commit. When the published
 repository squashes history, ship a committed provenance manifest mapping each confirmed
 packet → commit SHA + w3 hash so `feature_sha` stays resolvable from the shipped repo.
+
+## What a second party needs
+
+`sift audit` is not satisfied by a bare `git clone`. To replay-verify a `confirmed`, the
+auditor needs three inputs together:
+
+1. **The repo** at (or resolving to) the recorded `feature_sha` — the source the work was
+   reviewed against.
+2. **`.harness/log.jsonl`** — the hash-chained event log. Gitignored by default, so the
+   operator must ship it out of band, commit it deliberately, or hand it over with the repo.
+3. **`.harness/reviews/<id>.w2.json` / `.w3.json` / `.w4.json`** — the witness artifacts
+   whose hashes the confirmed event binds. Also gitignored by default; ship them alongside
+   the log.
+
+For a published or squashed repo, a committed provenance manifest (per *Provenance*) plus
+the shipped log and reviews is the practical hand-off package. Without the log and reviews
+there is nothing to verify — audit reports FAIL (no confirmed event / missing artifact),
+never a false PASS.
