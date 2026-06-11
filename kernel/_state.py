@@ -96,6 +96,8 @@ def _valid_witness(we, packet_id, reviews_dir, by_hash, confirmed_seq):
     # no field is presence-only. W2 reproduce, W3 review, W4 wiring each wrote a real
     # artifact whose sha256 must equal the hash carried in the confirmed event and the
     # chained verdict event. A decorative literal (w2_hash="reproduced") no longer passes.
+    # w2/w3/w4 each bind to their reviews .json AND the verdict event — no field is
+    # presence-only. A decorative literal (w2_hash="reproduced") no longer passes.
     for wk, suffix in (("w2_hash", ".w2.json"), ("w3_hash", ".w3.json"), ("w4_hash", ".w4.json")):
         art = os.path.join(reviews_dir, packet_id + suffix)
         if not os.path.exists(art):
@@ -104,21 +106,23 @@ def _valid_witness(we, packet_id, reviews_dir, by_hash, confirmed_seq):
             actual = hashlib.sha256(f.read()).hexdigest()
         if actual != we.get(wk) or vw.get(wk) != we.get(wk):
             return False
-    # extended_hash is RE-DERIVED from the packet file at replay and compared — proving
-    # the confirmed is bound to the exact packet it reviewed, not a presence-only string.
-    pkt = _packet_path(packet_id, reviews_dir)
-    if pkt and os.path.exists(pkt):
-        with open(pkt, "rb") as f:
-            eh = hashlib.sha256(f.read()).hexdigest()
-        if eh != we.get("extended_hash"):
+    # extended_hash binds the confirmed to the exact packet it reviewed. Prefer the PINNED
+    # snapshot (<id>.packet, written at review time, immutable, travels with reviews). Fall
+    # back to the live packet file for pre-pinning confirmeds. FAIL CLOSED when NEITHER
+    # exists — that absent-source path was the fail-open a garbage extended_hash exploited.
+    snap = os.path.join(reviews_dir, packet_id + ".packet")
+    pkt = snap if os.path.exists(snap) else _packet_path(packet_id, reviews_dir)
+    if not pkt or not os.path.exists(pkt):
+        return False
+    with open(pkt, "rb") as f:
+        if hashlib.sha256(f.read()).hexdigest() != we.get("extended_hash"):
             return False
     return True
 
 
 def _packet_path(packet_id, reviews_dir):
-    """Resolve a packet's markdown path for extended_hash re-derivation. Prefers the
-    pipeline-exported SIFT_PACKETS; falls back to the standard <repo>/tasks/packets
-    layout derived from the reviews dir (<repo>/.harness/reviews)."""
+    """Live packet path for pre-pinning (legacy) confirmeds. Prefers SIFT_PACKETS, else the
+    standard <repo>/tasks/packets layout derived from the reviews dir."""
     pdir = os.environ.get("SIFT_PACKETS")
     if not pdir:
         repo = os.path.dirname(os.path.dirname(os.path.abspath(reviews_dir)))

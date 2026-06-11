@@ -25,11 +25,12 @@ log_append lane.transition acceptance_met reviewing      "$P" >/dev/null
 printf '{"verdict":"pass","confidence":0.9}\n' > "$SIFT_REVIEWS/$P.w3.json"
 printf '{"w2":"reproduced","mode":"clean_checkout"}\n' > "$SIFT_REVIEWS/$P.w2.json"
 printf '{"ok":true,"reason":"wired"}\n' > "$SIFT_REVIEWS/$P.w4.json"
+printf 'pinned packet bytes\n' > "$SIFT_REVIEWS/$P.packet"
 _sha(){ python3 -c 'import hashlib,sys;print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$1"; }
-w3h=$(_sha "$SIFT_REVIEWS/$P.w3.json"); w2h=$(_sha "$SIFT_REVIEWS/$P.w2.json"); w4h=$(_sha "$SIFT_REVIEWS/$P.w4.json")
+w3h=$(_sha "$SIFT_REVIEWS/$P.w3.json"); w2h=$(_sha "$SIFT_REVIEWS/$P.w2.json"); w4h=$(_sha "$SIFT_REVIEWS/$P.w4.json"); eh=$(_sha "$SIFT_REVIEWS/$P.packet")
 VJ=$(python3 -c 'import json,sys;print(json.dumps({"verdict":"pass","feature_sha":"abc123","w1_ok":True,"w2_hash":sys.argv[1],"w3_hash":sys.argv[2],"w4_hash":sys.argv[3]}))' "$w2h" "$w3h" "$w4h")
 VEH=$(log_append review.verdict reviewing reviewing "$P" "$VJ")
-WE=$(python3 -c 'import json,sys;print(json.dumps({"verdict_event":sys.argv[1],"feature_sha":"abc123","extended_hash":"def456","w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4]}))' "$VEH" "$w2h" "$w3h" "$w4h")
+WE=$(python3 -c 'import json,sys;print(json.dumps({"verdict_event":sys.argv[1],"feature_sha":"abc123","extended_hash":sys.argv[5],"w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4]}))' "$VEH" "$w2h" "$w3h" "$w4h" "$eh")
 log_append lane.transition reviewing confirmed "$P" "$WE" >/dev/null
 
 verify_log_chain >/dev/null || fail "legit log must verify"

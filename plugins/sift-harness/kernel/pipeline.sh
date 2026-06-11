@@ -136,7 +136,12 @@ except Exception: print("unknown")' 2>/dev/null || echo unknown)"
   w3h="$(_sift_sha < "$SIFT_REVIEWS/$id.w3.json")"
   w4h="$(_sift_sha < "$w4art")"
   fsha="$(git -C "$SIFT_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo nogit)"
-  esha="$(_sift_sha < "$pf")"
+  # PIN the packet bytes into the reviews dir so extended_hash binds to a stable artifact
+  # that travels with .harness/reviews (the mutable tasks/packets file is gitignored and
+  # archived after confirm). _state.py re-derives extended_hash from this snapshot.
+  local pktart="$SIFT_REVIEWS/$id.packet"
+  cp "$pf" "$pktart"
+  esha="$(_sift_sha < "$pktart")"
   # the verdict event records ALL THREE real witness-artifact hashes; the terminal
   # confirmed event binds to them (and to the re-derivable extended_hash). _state.py
   # rejects any of these that does not match its on-disk artifact at replay.
