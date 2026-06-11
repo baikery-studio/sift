@@ -99,20 +99,29 @@ def cmd_append(log_path):
 
 
 def cmd_verify(log_path):
-    prev_hash, prev_seq = GENESIS, 0
-    n = 0
-    for i, ln in enumerate(_read_events(log_path), 1):
-        n = i
+    raw = _read_events(log_path)
+    # Classify old-schema ONCE for the WHOLE file (H1 fix): a log is pre-chain only if
+    # EVERY event lacks event_hash. A missing event_hash inside an otherwise hash-chained
+    # log is TAMPERING (a deleted hash), NOT benign schema drift — so it must not be
+    # downgraded to exit 24 (which the operator would "fix" by migrating, laundering the
+    # forgery). Parse first; non-JSON is still exit 20.
+    evs = []
+    for i, ln in enumerate(raw, 1):
         try:
-            ev = json.loads(ln)
+            evs.append(json.loads(ln))
         except Exception as e:
             sys.stderr.write("log corrupt at line %d: not JSON (%s)\n" % (i, e)); sys.exit(20)
+    if evs and all(e.get("event_hash") is None for e in evs):
+        sys.stderr.write("log schema too old: pre-chain events (no event_hash) — run 'sift migrate-log'\n")
+        sys.exit(24)
+    prev_hash, prev_seq = GENESIS, 0
+    n = 0
+    for i, ev in enumerate(evs, 1):
+        n = i
         stored = ev.get("event_hash")
         if stored is None:
-            # a pre-chain (old-schema) event — NOT tampering, just evolution. Distinct
-            # signal + exit code so the operator runs migrate-log instead of panicking.
-            sys.stderr.write("log schema too old at line %d: pre-chain event (no event_hash) — run 'sift migrate-log'\n" % i)
-            sys.exit(24)
+            # missing hash in a chained log = a deleted hash = TAMPERED (not schema-old).
+            sys.stderr.write("log TAMPERED at line %d: event_hash deleted from a chained log\n" % i); sys.exit(21)
         content = {k: v for k, v in ev.items() if k != "event_hash"}
         if _event_hash(content) != stored:
             sys.stderr.write("log TAMPERED at line %d: event_hash mismatch\n" % i); sys.exit(21)
@@ -139,8 +148,15 @@ def cmd_migrate(log_path):
             parsed.append(json.loads(ln))
         except Exception:
             sys.stderr.write("cannot migrate: line %d is not JSON\n" % i); sys.exit(2)
-    if all(e.get("event_hash") for e in parsed):
+    have = [bool(e.get("event_hash")) for e in parsed]
+    if all(have):
         print("nothing to migrate: log is already current-schema (v%s)" % LOG_SCHEMA_VERSION); return
+    if any(have):
+        # MIXED log: some events chained, some not. This is NOT benign drift — it is the
+        # forgery-laundering shape (a deleted hash inside a chained log). Refuse: migrating
+        # would re-chain the tampered event clean. Operator must investigate the tamper.
+        sys.stderr.write("cannot migrate: MIXED log (some events hash-chained, some not) — this is a tamper signature, not schema drift; refusing to re-chain. Investigate with 'sift verify-log'.\n")
+        sys.exit(2)
     with open(log_path + ".pre-migrate", "w") as f:
         f.write("\n".join(lines) + "\n")
     prev_hash, seq, out = GENESIS, 0, []
