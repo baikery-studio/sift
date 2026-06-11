@@ -24,6 +24,7 @@ case "$cmd" in
   wave-review) . "$SIFT_PLUGIN_ROOT/kernel/wave.sh"; sift_wave_review "$@" ;;
   next)        . "$SIFT_PLUGIN_ROOT/kernel/next.sh"; sift_next "$@" ;;
   abort)       . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; sift_abort "$@" ;;
+  audit)       . "$SIFT_PLUGIN_ROOT/kernel/audit.sh"; sift_audit "$@" ;;
   doctor)      . "$SIFT_PLUGIN_ROOT/kernel/doctor.sh"; sift_doctor "$@" ;;
   focus)       . "$SIFT_PLUGIN_ROOT/kernel/scope_guard.sh"; sift_focus "$@" ;;
   init-claudemd) . "$SIFT_PLUGIN_ROOT/kernel/scaffold.sh"; sift_init_claudemd "$@" ;;
