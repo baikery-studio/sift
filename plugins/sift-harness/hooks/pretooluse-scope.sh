@@ -29,7 +29,7 @@ parsed="$(printf '%s' "$payload" | python3 -c 'import json,sys,re
 # out-of-scope sentinel never matches scope.paths). This defeats the fail-open bypass
 # (dd of=, interpreter -c/-e, eval, $(...), xargs, find -exec, ln, redirect-to-var).
 def bash_opaque(c):
-    pats=[r"\$\(", r"`", r"<\(", r">\(",
+    pats=[r"\$\(", r"`", r"<\(", r">\(", r"<<",
           r"\beval\b", r"\b(?:ba)?sh\s+-c\b",
           r"\b(?:python3?|perl|ruby|node)\b[^|;&]*-[A-Za-z]*[ce]\b",
           r"\bawk\b", r"\bxargs\b", r"\bfind\b[^|;&]*-exec\b",
@@ -37,7 +37,8 @@ def bash_opaque(c):
     return any(re.search(p, c) for p in pats)
 def bash_targets(c):
     t=[]
-    for m in re.finditer(r"(\d*)>>?\s*(&?)([^\s;|&<>]+)", c):
+    # `>>?\|?` matches >, >>, and the clobber forms >| / >>| (and fd-prefixed 1>| etc.).
+    for m in re.finditer(r"(\d*)>>?\|?\s*(&?)([^\s;|&<>]+)", c):
         fd,amp,tgt=m.groups()
         if amp or tgt.isdigit(): continue
         if tgt in ("/dev/null","/dev/stderr","/dev/stdout"): continue
@@ -49,6 +50,10 @@ def bash_targets(c):
     m=re.search(r"\bsed\b[^;|]*\s-i\S*\s+(?:-e\s+\S+\s+)*([^\s;|&]+)", c)
     if m: t.append(m.group(1))
     return t
+def has_redirect(c):
+    # any output-redirection operator present (>, >>, >|, N>, &>) — used for the
+    # fail-closed backstop: a redirect present but no target resolved is OPAQUE.
+    return re.search(r"(?<![0-9<])>|&>", c) is not None
 try:
     d=json.loads(sys.stdin.read())
     if not isinstance(d,dict): raise ValueError
@@ -59,7 +64,14 @@ try:
     paths=[]
     if tn=="Bash":
         cmd=str(ti.get("command") or "")
-        paths=["__OPAQUE_BASH__"] if bash_opaque(cmd) else bash_targets(cmd)
+        if bash_opaque(cmd):
+            paths=["__OPAQUE_BASH__"]
+        else:
+            paths=bash_targets(cmd)
+            # fail-closed backstop: a redirect operator is present but resolved to no
+            # target (exotic/fd-juggled redirect) — treat as opaque, do not allow.
+            if not paths and has_redirect(cmd):
+                paths=["__OPAQUE_BASH__"]
     else:
         fp=str(ti.get("file_path") or ti.get("path") or "")
         if fp: paths=[fp]
