@@ -17,7 +17,13 @@ scope_guard_decision() {
     __PARSE_ERROR__)                           # unparseable/suspicious payload
       [ -n "$foc" ] && { echo "DENY (unparseable hook payload while focus=$foc — fail-closed)"; return 2; }
       echo "ALLOW (unparseable payload, no active focus)"; return 0 ;;
-    Edit|Write|MultiEdit|NotebookEdit) ;;      # only fence edit tools
+    Edit|Write|MultiEdit|NotebookEdit)         # fence write tools (Bash targets arrive as Write)
+      # HARD-DENY the trust substrate for any write intent, focus or not: the worker
+      # must never write .harness/ or .canary/ directly (the forge channel).
+      case "$path" in
+        .harness/*|*/.harness/*|.canary/*|*/.canary/*)
+          echo "DENY ($path is under .harness/ or .canary/ — trust substrate, never agent-writable)"; return 2 ;;
+      esac ;;
     *) echo "ALLOW (non-edit tool: $tool)"; return 0 ;;
   esac
   # tool is an edit tool here. Distinguish "no focus" (ALLOW) from "focus declared

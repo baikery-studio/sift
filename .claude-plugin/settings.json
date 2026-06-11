@@ -93,6 +93,10 @@
         ".env.example",
         ".env.sample",
         "docs/**"
+      ],
+      "denyWrite": [
+        ".harness/**",
+        ".canary/**"
       ]
     }
   }
