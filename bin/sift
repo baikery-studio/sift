@@ -22,6 +22,7 @@ case "$cmd" in
   selftest)    . "$SIFT_PLUGIN_ROOT/kernel/selftest.sh"; sift_selftest "$@" ;;
   setup)       . "$SIFT_PLUGIN_ROOT/kernel/setup.sh"; sift_setup "$@" ;;
   wave-review) . "$SIFT_PLUGIN_ROOT/kernel/wave.sh"; sift_wave_review "$@" ;;
+  coverage)    . "$SIFT_PLUGIN_ROOT/kernel/wave.sh"; sift_coverage "$@" ;;
   next)        . "$SIFT_PLUGIN_ROOT/kernel/next.sh"; sift_next "$@" ;;
   abort)       . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; sift_abort "$@" ;;
   audit)       . "$SIFT_PLUGIN_ROOT/kernel/audit.sh"; sift_audit "$@" ;;
