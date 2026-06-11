@@ -41,10 +41,54 @@ _w3_keyless() {
   fi
 }
 
+# Host-verdict mode (UP-1, zero egress): instead of W3 minting its own structural
+# pass, the driving agent writes an R1-R13 rubric verdict to the W3 artifact and W3
+# VALIDATES it. On by SIFT_W3_REQUIRE_HOST_VERDICT=1 or witnesses.w3.require_host_verdict
+# in profile.json. No network, no keys — the agent in the loop is the reviewer.
+_w3_host_mode() {
+  [ "${SIFT_W3_REQUIRE_HOST_VERDICT:-}" = "1" ] && return 0
+  python3 -c 'import json,sys
+try: v=json.load(open(sys.argv[1]))["witnesses"]["w3"].get("require_host_verdict",False)
+except Exception: v=False
+sys.exit(0 if v is True else 1)' "$W3_HERE/profile.json" 2>/dev/null
+}
+
+# Validate a host-written verdict artifact: echoes pass|<failreason>; rc 0 only on a
+# well-formed, single-verdict, rubric-complete pass. Fail-closed and injection-resistant
+# (a planted second verdict object -> reject via _w3_extract_verdict).
+_w3_validate_host_verdict() {
+  local art="$1"
+  [ -f "$art" ] || { echo "missing"; return 1; }
+  local v; v="$(SIFT_W3_RAW="$(cat "$art")" _w3_extract_verdict)"
+  [ "$v" = "pass" ] || { echo "${v:-malformed}"; return 1; }
+  SIFT_W3_ART="$art" python3 -c '
+import json,os,sys
+try: d=json.load(open(os.environ["SIFT_W3_ART"]))
+except Exception: print("malformed"); sys.exit(1)
+if d.get("verdict")!="pass": print("reject"); sys.exit(1)
+try: conf=float(d.get("confidence",0))
+except Exception: conf=0.0
+if conf < 0.5: print("low-confidence"); sys.exit(1)
+rub=d.get("rubric")
+if not isinstance(rub,dict): print("no-rubric"); sys.exit(1)
+missing=[k for k in ("R%d"%i for i in range(1,14)) if k not in rub]
+if missing: print("incomplete-rubric"); sys.exit(1)
+print("pass")'
+}
+
 witness_w3() {
   local pp="$1" id="$2"
   local reviews="${SIFT_REVIEWS:-.harness/reviews}"; mkdir -p "$reviews"
   local root="${SIFT_REPO_ROOT:-$(pwd)}"
+
+  if _w3_host_mode; then
+    local hres; hres="$(_w3_validate_host_verdict "$reviews/$id.w3.json")"
+    if [ "$hres" = pass ]; then
+      # the host-written verdict IS the artifact — never overwrite it
+      printf '{ "ok": true, "verdict": "pass", "w3_mode": "host" }\n'; return 0
+    fi
+    printf '{ "ok": false, "verdict": "%s", "reason": "host-verdict W3 fail-closed", "w3_mode": "host" }\n' "$hres"; return 1
+  fi
 
   local diff
   diff="$(git -C "$root" diff HEAD 2>/dev/null || true)"

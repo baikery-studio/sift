@@ -25,7 +25,8 @@
     "w3": {
       "impl": "witness_w3.sh",
       "mode": "keyless",
-      "note": "keyless deterministic structural review \u2014 no model, no network, no keys"
+      "require_host_verdict": false,
+      "note": "keyless deterministic structural review by default (no model, no network, no keys). Opt-in require_host_verdict makes W3 validate an agent-written R1-R13 verdict instead of minting its own \u2014 still zero egress."
     },
     "w4": {
       "impl": "witness_w4.sh",
