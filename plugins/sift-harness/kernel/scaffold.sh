@@ -65,7 +65,16 @@ sift_scaffold() {
   if [ -n "$paths_csv" ]; then
     work_paths="$(printf '%s' "$paths_csv" | tr ',' '\n' | awk 'NF{gsub(/^[ \t]+|[ \t]+$/,"");print}')"
   fi
-  [ -n "$work_paths" ] || work_paths="out/$id.txt"
+  if [ -z "$work_paths" ]; then
+    # default scope = the profile's declared deliverable (scaffold.fields artifact.path),
+    # so the thing the packet must produce is IN scope. Falls back to out/$id.txt when the
+    # profile declares no artifact path (e.g. software, where the user sets scope.paths).
+    local _art=""
+    if [ -f "$plug/profiles/$profile/scaffold.fields" ]; then
+      _art="$(grep -E '^[[:space:]]*path:[[:space:]]*' "$plug/profiles/$profile/scaffold.fields" | head -1 | sed -E 's/^[[:space:]]*path:[[:space:]]*//; s/__ID__/'"$id"'/g' | tr -d '[:space:]')"
+    fi
+    work_paths="${_art:-out/$id.txt}"
+  fi
 
   local goal="scaffolded packet $id — replace this goal and produce the declared artifact"
   {
@@ -88,7 +97,7 @@ EOF
     else
       printf '# (profile %s declares no scaffold.fields — add this profile'"'"'s required task fields here)\n' "$profile"
     fi
-    printf 'scope:\n  type: harness\n  paths:\n'
+    printf 'scope:\n  paths:\n'
     printf '%s\n' "$work_paths" | while IFS= read -r _p; do [ -n "$_p" ] && printf '    - %s\n' "$_p"; done
     printf '    - tasks/packets/%s.md\n    - evals/snapshots/%s/test.sh\n' "$id" "$id"
     cat <<EOF
