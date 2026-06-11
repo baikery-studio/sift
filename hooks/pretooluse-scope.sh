@@ -24,6 +24,17 @@ payload="$(cat 2>/dev/null || true)"
 # fd-dups (2>&1) and /dev/null are not file writes. A garbled payload yields
 # __PARSE_ERROR__ so the guard fails CLOSED while a focus is active.
 parsed="$(printf '%s' "$payload" | python3 -c 'import json,sys,re
+# A Bash command whose write targets a regex CANNOT statically enumerate is OPAQUE:
+# we emit __OPAQUE_BASH__ and let the guard fail CLOSED under an active focus (an
+# out-of-scope sentinel never matches scope.paths). This defeats the fail-open bypass
+# (dd of=, interpreter -c/-e, eval, $(...), xargs, find -exec, ln, redirect-to-var).
+def bash_opaque(c):
+    pats=[r"\$\(", r"`", r"<\(", r">\(",
+          r"\beval\b", r"\b(?:ba)?sh\s+-c\b",
+          r"\b(?:python3?|perl|ruby|node)\b[^|;&]*-[A-Za-z]*[ce]\b",
+          r"\bawk\b", r"\bxargs\b", r"\bfind\b[^|;&]*-exec\b",
+          r"\bdd\b", r"\bln\b", r">\s*\$"]
+    return any(re.search(p, c) for p in pats)
 def bash_targets(c):
     t=[]
     for m in re.finditer(r"(\d*)>>?\s*(&?)([^\s;|&<>]+)", c):
@@ -31,7 +42,7 @@ def bash_targets(c):
         if amp or tgt.isdigit(): continue
         if tgt in ("/dev/null","/dev/stderr","/dev/stdout"): continue
         t.append(tgt)
-    for m in re.finditer(r"(?:^|[;|&])\s*(?:tee|cp|mv|install|truncate|touch|rsync|dd)\b([^;|&]*)", c):
+    for m in re.finditer(r"(?:^|[;|&])\s*(?:tee|cp|mv|install|truncate|touch|rsync)\b([^;|&]*)", c):
         for tok in m.group(1).split():
             if tok.startswith("-") or "=" in tok: continue
             t.append(tok)
@@ -47,7 +58,8 @@ try:
     if any(c in tn for c in "\n\r"): raise ValueError
     paths=[]
     if tn=="Bash":
-        paths=bash_targets(str(ti.get("command") or ""))
+        cmd=str(ti.get("command") or "")
+        paths=["__OPAQUE_BASH__"] if bash_opaque(cmd) else bash_targets(cmd)
     else:
         fp=str(ti.get("file_path") or ti.get("path") or "")
         if fp: paths=[fp]

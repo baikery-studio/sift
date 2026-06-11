@@ -23,6 +23,12 @@ scope_guard_decision() {
       case "$path" in
         .harness/*|*/.harness/*|.canary/*|*/.canary/*)
           echo "DENY ($path is under .harness/ or .canary/ — trust substrate, never agent-writable)"; return 2 ;;
+        __OPAQUE_BASH__)
+          # a Bash command whose write targets can't be statically verified (eval,
+          # interpreters, command substitution, dd, xargs, find -exec, ...). FAIL CLOSED
+          # under an active focus; with none, allow (consistent with edit-tool behavior).
+          [ -n "$foc" ] && { echo "DENY (opaque Bash under active focus — unverifiable write targets; route writes through Edit/Write or split the command)"; return 2; }
+          echo "ALLOW (opaque Bash, no active focus)"; return 0 ;;
       esac ;;
     *) echo "ALLOW (non-edit tool: $tool)"; return 0 ;;
   esac
