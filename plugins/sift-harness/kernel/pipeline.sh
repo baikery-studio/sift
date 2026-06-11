@@ -92,9 +92,26 @@ sift_review() {
   [ "$(project_state "$id")" = acceptance_met ] || { echo "[sift] $id not 'acceptance_met'" >&2; return 1; }
   log_append lane.transition acceptance_met reviewing "$id" >/dev/null
   mkdir -p "$SIFT_REVIEWS"
+  # W2 reproduce: independent, from clean (committed) state, writing a REAL artifact.
+  # A clean tree means the reproduce reflects feature_sha, not uncommitted work; a dirty
+  # tree fails closed with an actionable message. No-git falls to a cleared-env in-place
+  # run recorded as the fresh_clone_unavailable soft floor.
+  local w2art="$SIFT_REVIEWS/$id.w2.json" w2mode="clean_checkout"
+  if git -C "$SIFT_REPO_ROOT" rev-parse HEAD >/dev/null 2>&1; then
+    if [ -n "$(git -C "$SIFT_REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+      log_append lane.transition reviewing review_failed "$id" >/dev/null
+      echo "[sift] W2 reproduce: uncommitted changes — commit before review" >&2; return 1
+    fi
+  else
+    w2mode="fresh_clone_unavailable"
+  fi
   local w2out; w2out="$(bash "$pd/acceptance/run.sh" "$pf" "$id" 2>/dev/null || true)"
   printf '%s' "$w2out" | _json_true passed \
     || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] W2 reproduce failed: $(printf '%s' "$w2out" | _json_reason)" >&2; return 1; }
+  python3 -c 'import json,sys
+try: acc=json.loads(sys.argv[2])
+except Exception: acc={}
+print(json.dumps({"w2":"reproduced","mode":sys.argv[1],"acceptance":acc}))' "$w2mode" "$w2out" > "$w2art"
   w3mode="unknown"
   if [ -f "$pd/witness_w3.sh" ]; then
     w3out="$(bash "$pd/witness_w3.sh" "$pf" "$id" 2>/dev/null || true)"
@@ -106,19 +123,26 @@ except Exception: print("unknown")' 2>/dev/null || echo unknown)"
   else
     log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] no keyless W3 (LLM W3 not wired in spine)" >&2; return 1
   fi
+  local w4art="$SIFT_REVIEWS/$id.w4.json"
   local w4out; w4out="$(bash "$pd/witness_w4.sh" "$pf" "$id" 2>/dev/null || true)"
   printf '%s' "$w4out" | _json_true ok \
     || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] W4 failed: $(printf '%s' "$w4out" | _json_reason)" >&2; return 1; }
+  printf '%s\n' "$w4out" > "$w4art"
   # Emit a CHAINED review.verdict event recording the real W3 verdict (=pass,
   # since we passed the fail-closed W3 gate above), then bind the terminal
   # confirmed event to that event by its event_hash. Authenticity now rides on
   # the tamper-evident chain, not a worker-writable side file (MP1-TRUST-CORE).
+  w2h="$(_sift_sha < "$w2art")"
   w3h="$(_sift_sha < "$SIFT_REVIEWS/$id.w3.json")"
+  w4h="$(_sift_sha < "$w4art")"
   fsha="$(git -C "$SIFT_REPO_ROOT" rev-parse HEAD 2>/dev/null || echo nogit)"
   esha="$(_sift_sha < "$pf")"
-  vj="$(python3 -c 'import json,sys; print(json.dumps({"verdict":"pass","feature_sha":sys.argv[1],"w1_ok":True,"w2_ok":True,"w4_ok":True,"w3_hash":sys.argv[2],"w3_mode":sys.argv[3]}))' "$fsha" "$w3h" "${w3mode:-unknown}")"
+  # the verdict event records ALL THREE real witness-artifact hashes; the terminal
+  # confirmed event binds to them (and to the re-derivable extended_hash). _state.py
+  # rejects any of these that does not match its on-disk artifact at replay.
+  vj="$(python3 -c 'import json,sys; print(json.dumps({"verdict":"pass","feature_sha":sys.argv[1],"w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4],"w3_mode":sys.argv[5]}))' "$fsha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}")"
   veh="$(log_append review.verdict reviewing reviewing "$id" "$vj")"
-  we="$(python3 -c 'import json,sys; print(json.dumps({"verdict_event":sys.argv[1],"feature_sha":sys.argv[2],"extended_hash":sys.argv[3],"w1_ok":True,"w2_hash":"reproduced","w3_hash":sys.argv[4],"w4_hash":"w4-goal-addressed"}))' "$veh" "$fsha" "$esha" "$w3h")"
+  we="$(python3 -c 'import json,sys; print(json.dumps({"verdict_event":sys.argv[1],"feature_sha":sys.argv[2],"extended_hash":sys.argv[3],"w1_ok":True,"w2_hash":sys.argv[4],"w3_hash":sys.argv[5],"w4_hash":sys.argv[6]}))' "$veh" "$fsha" "$esha" "$w2h" "$w3h" "$w4h")"
   log_append lane.transition reviewing confirmed "$id" "$we" >/dev/null
   rm -f "$SIFT_STATE/focus"   # work confirmed: release the scope-guard focus
   echo "[sift] confirmed $id (witness-bound to verdict event $veh)"

@@ -39,9 +39,11 @@ are the `/sift-*` commands).
 4. **Execute.** `sift execute <id>` runs the acceptance check (`→ acceptance_met`).
    If it fails, fix and re-run; don't proceed on red.
 
-5. **Review.** `sift review <id>` runs the witnesses (W2 reproduce, W3 review, W4
-   wiring) and, only if they pass, writes a witness-bound `confirmed` event and
-   clears the focus. Check `sift state <id>` → `confirmed`.
+5. **Commit, then review.** Commit your change first: W2 reproduces from the clean
+   committed tree (`feature_sha`), so uncommitted work fails the witness with
+   "commit before review." Then `sift review <id>` runs the witnesses (W2 reproduce,
+   W3 review, W4 wiring) and, only if they pass, writes a witness-bound `confirmed`
+   event and clears the focus. Check `sift state <id>` → `confirmed`.
 
 If you're resuming after a break, `sift next <wave>` tells you the next actionable
 packet (state is replayed from the log, so it survives a context compaction).

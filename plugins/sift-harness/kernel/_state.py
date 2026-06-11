@@ -92,13 +92,38 @@ def _valid_witness(we, packet_id, reviews_dir, by_hash, confirmed_seq):
         return False
     if vw.get("feature_sha") != we.get("feature_sha"):
         return False
-    # w3_hash must match the verdict event AND the on-disk fresh W3 artifact.
-    art = os.path.join(reviews_dir, packet_id + ".w3.json")
-    if not os.path.exists(art):
-        return False
-    with open(art, "rb") as f:
-        actual = hashlib.sha256(f.read()).hexdigest()
-    return actual == we.get("w3_hash") and vw.get("w3_hash") == we.get("w3_hash")
+    # Every witness hash binds to BOTH the on-disk artifact AND the verdict event —
+    # no field is presence-only. W2 reproduce, W3 review, W4 wiring each wrote a real
+    # artifact whose sha256 must equal the hash carried in the confirmed event and the
+    # chained verdict event. A decorative literal (w2_hash="reproduced") no longer passes.
+    for wk, suffix in (("w2_hash", ".w2.json"), ("w3_hash", ".w3.json"), ("w4_hash", ".w4.json")):
+        art = os.path.join(reviews_dir, packet_id + suffix)
+        if not os.path.exists(art):
+            return False
+        with open(art, "rb") as f:
+            actual = hashlib.sha256(f.read()).hexdigest()
+        if actual != we.get(wk) or vw.get(wk) != we.get(wk):
+            return False
+    # extended_hash is RE-DERIVED from the packet file at replay and compared — proving
+    # the confirmed is bound to the exact packet it reviewed, not a presence-only string.
+    pkt = _packet_path(packet_id, reviews_dir)
+    if pkt and os.path.exists(pkt):
+        with open(pkt, "rb") as f:
+            eh = hashlib.sha256(f.read()).hexdigest()
+        if eh != we.get("extended_hash"):
+            return False
+    return True
+
+
+def _packet_path(packet_id, reviews_dir):
+    """Resolve a packet's markdown path for extended_hash re-derivation. Prefers the
+    pipeline-exported SIFT_PACKETS; falls back to the standard <repo>/tasks/packets
+    layout derived from the reviews dir (<repo>/.harness/reviews)."""
+    pdir = os.environ.get("SIFT_PACKETS")
+    if not pdir:
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(reviews_dir)))
+        pdir = os.path.join(repo, "tasks", "packets")
+    return os.path.join(pdir, packet_id + ".md")
 
 
 def project_state(log_path, packet_id, reviews_dir):
