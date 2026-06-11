@@ -13,6 +13,12 @@ log_append() {
 }
 
 # verify_log_chain — tamper-evidence gate; non-zero + line number on any break.
+# Exit 24 = schema-too-old (run migrate-log), distinct from 21 TAMPERED.
 verify_log_chain() {
   python3 "$_LOGSH_DIR/_log.py" verify "$SIFT_LOG"
+}
+
+# migrate_log_chain — re-chain a pre-chain (old-schema) log to the current schema.
+migrate_log_chain() {
+  python3 "$_LOGSH_DIR/_log.py" migrate "$SIFT_LOG"
 }

@@ -17,6 +17,8 @@ case "$cmd" in
   status)      . "$SIFT_PLUGIN_ROOT/kernel/status.sh"; sift_status "$@" ;;
   sync)        . "$SIFT_PLUGIN_ROOT/kernel/sync.sh"; sift_sync "$@" ;;
   verify-log)  . "$SIFT_PLUGIN_ROOT/kernel/log.sh"; verify_log_chain ;;
+  migrate-log) case "${1:-}" in --help|-h) echo "usage: sift migrate-log — re-chain a pre-chain (old-schema) log to the current schema (backs up to <log>.pre-migrate)"; exit 0 ;; esac
+               . "$SIFT_PLUGIN_ROOT/kernel/log.sh"; migrate_log_chain ;;
   selftest)    . "$SIFT_PLUGIN_ROOT/kernel/selftest.sh"; sift_selftest "$@" ;;
   setup)       . "$SIFT_PLUGIN_ROOT/kernel/setup.sh"; sift_setup "$@" ;;
   wave-review) . "$SIFT_PLUGIN_ROOT/kernel/wave.sh"; sift_wave_review "$@" ;;

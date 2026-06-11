@@ -16,6 +16,7 @@ Stdlib only (no PyYAML / no deps) so it runs on any python3 — part of H8.
 import sys, os, json, hashlib, fcntl, unicodedata
 
 GENESIS = "0" * 64
+LOG_SCHEMA_VERSION = "2"   # "2" = the hash-chained {seq,prev_hash,event_hash} schema
 
 
 def _canon(obj):
@@ -74,6 +75,7 @@ def cmd_append(log_path):
                 "actor": os.environ.get("SIFT_ACTOR", "harness"),
                 "witness_evidence": json.loads(we) if we else None,
                 "prev_hash": prev_hash,
+                "log_schema_version": LOG_SCHEMA_VERSION,
             }
             content["event_hash"] = _event_hash(content)
             with open(log_path, "a") as f:
@@ -93,6 +95,11 @@ def cmd_verify(log_path):
         except Exception as e:
             sys.stderr.write("log corrupt at line %d: not JSON (%s)\n" % (i, e)); sys.exit(20)
         stored = ev.get("event_hash")
+        if stored is None:
+            # a pre-chain (old-schema) event — NOT tampering, just evolution. Distinct
+            # signal + exit code so the operator runs migrate-log instead of panicking.
+            sys.stderr.write("log schema too old at line %d: pre-chain event (no event_hash) — run 'sift migrate-log'\n" % i)
+            sys.exit(24)
         content = {k: v for k, v in ev.items() if k != "event_hash"}
         if _event_hash(content) != stored:
             sys.stderr.write("log TAMPERED at line %d: event_hash mismatch\n" % i); sys.exit(21)
@@ -104,13 +111,58 @@ def cmd_verify(log_path):
     print("chain ok: %d events" % n)
 
 
+def cmd_migrate(log_path):
+    """Re-chain a pre-chain (old-schema) log into the current hash-chained schema.
+    Backs up the original to <log>.pre-migrate; refuses (no-op) if already current;
+    never silently drops events. Note: witness_evidence.verdict_event references point
+    at OLD hashes, so a migrated `confirmed` needs re-review to re-bind — migration
+    restores chain integrity, not witness provenance."""
+    lines = _read_events(log_path)
+    if not lines:
+        print("nothing to migrate: no log at %s" % log_path); return
+    parsed = []
+    for i, ln in enumerate(lines, 1):
+        try:
+            parsed.append(json.loads(ln))
+        except Exception:
+            sys.stderr.write("cannot migrate: line %d is not JSON\n" % i); sys.exit(2)
+    if all(e.get("event_hash") for e in parsed):
+        print("nothing to migrate: log is already current-schema (v%s)" % LOG_SCHEMA_VERSION); return
+    with open(log_path + ".pre-migrate", "w") as f:
+        f.write("\n".join(lines) + "\n")
+    prev_hash, seq, out = GENESIS, 0, []
+    for e in parsed:
+        seq += 1
+        meta = e.get("metadata") or {}
+        content = {
+            "seq": seq,
+            "ts": e.get("ts", ""),
+            "packet_id": e.get("packet_id", ""),
+            "kind": e.get("kind", ""),
+            "from": e.get("from", meta.get("from", "")),
+            "to": e.get("to", meta.get("to", e.get("lane", ""))),
+            "actor": e.get("actor", "harness"),
+            "witness_evidence": e.get("witness_evidence"),
+            "prev_hash": prev_hash,
+            "log_schema_version": LOG_SCHEMA_VERSION,
+        }
+        content["event_hash"] = _event_hash(content)
+        out.append(_canon(content))
+        prev_hash = content["event_hash"]
+    with open(log_path, "w") as f:
+        f.write("\n".join(out) + "\n")
+    print("migrated %d events to schema v%s (backup: %s.pre-migrate)" % (len(out), LOG_SCHEMA_VERSION, log_path))
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
-        sys.stderr.write("usage: _log.py {append|verify} <log_path>\n"); sys.exit(2)
+        sys.stderr.write("usage: _log.py {append|verify|migrate} <log_path>\n"); sys.exit(2)
     cmd, log_path = sys.argv[1], sys.argv[2]
     if cmd == "append":
         cmd_append(log_path)
     elif cmd == "verify":
         cmd_verify(log_path)
+    elif cmd == "migrate":
+        cmd_migrate(log_path)
     else:
         sys.stderr.write("unknown cmd: %s\n" % cmd); sys.exit(2)
