@@ -60,6 +60,19 @@ except Exception:
     print("__PARSE_ERROR__\t_")')
 EOF
 
+# UP-4 first-edit engage: a real edit/bashwrite in an UN-SET-UP repo (no .harness/, no
+# config) means the harness is inert and the agent is un-herded — the most dangerous
+# moment (a fresh repo, no loop) is exactly the one a setup-gated harness can't see.
+# Emit an engage signal offering setup instead of silently passing.
+if { [ "$kind" = "edit" ] || [ "$kind" = "bashwrite" ]; } \
+   && [ ! -d "$SIFT_REPO_ROOT/.harness" ] && [ ! -f "$SIFT_REPO_ROOT/sift-harness.config.json" ]; then
+  python3 -c 'import json,sys
+print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":sys.argv[1]}}))' \
+    "[sift] no .harness/ in this repo — the harness is not set up and is inert (completion is NOT witness-checked). Run \`sift setup\` to engage it, then \`sift init-claudemd\` to make the loop a standing rule." 2>/dev/null \
+  || echo "[sift] no .harness/ — not set up; run 'sift setup' to engage the harness (then 'sift init-claudemd' for the standing rule)" >&2
+  exit 0
+fi
+
 # A Bash file-write with no active packet arms the engage-gate the same as an edit tool
 # (FORT-5). It has no single scoped path, so it only arms the gate — the in-scope
 # stale-acceptance check below applies to the edit tools.
