@@ -71,16 +71,56 @@ def _real_refs(text, name):
     return n
 
 
+def _w4_search_files(root, packet):
+    """The set of files W4 searches for the wiring symbol. Layout-INDEPENDENT:
+      1. packet `wiring_paths` (space/comma-separated dirs/globs under root), else
+      2. git-tracked files (`git -C root ls-files`) — correct for any layout, and excludes
+         build noise / untracked junk, else
+      3. (no git) walk root, skipping dot-dirs and common noise.
+    .json files are always excluded (manifests, not code)."""
+    import subprocess
+    _NOISE = {".git", ".harness", ".canary", "node_modules", "vendor", "dist", "build",
+              "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache"}
+    wp = fm_get(packet, "wiring_paths")
+    out = []
+    if wp:
+        for spec in re.split(r"[,\s]+", wp.strip()):
+            if not spec:
+                continue
+            base = os.path.join(root, spec)
+            if os.path.isfile(base):
+                out.append(base)
+            else:
+                out += [f for f in glob.glob(os.path.join(base, "**", "*"), recursive=True) if os.path.isfile(f)]
+    else:
+        tracked = []
+        try:
+            r = subprocess.run(["git", "-C", root, "ls-files"], capture_output=True, text=True, timeout=10)
+            if r.returncode == 0:
+                tracked = [ln for ln in r.stdout.splitlines() if ln.strip()]
+        except Exception:
+            tracked = []
+        if tracked:
+            out = [os.path.join(root, p) for p in tracked]
+        else:
+            for dirpath, dirnames, filenames in os.walk(root):
+                dirnames[:] = [d for d in dirnames if d not in _NOISE]
+                for fn in filenames:
+                    out.append(os.path.join(dirpath, fn))
+    # Exclude non-code: .json (manifests) and .md (packet declarations + docs). A packet
+    # file names its own wiring_symbol, so including it would count the declaration as a
+    # code reference and let a dead def pass. W4 searches CODE for the symbol's reachability.
+    return [f for f in out if os.path.isfile(f) and not f.endswith((".json", ".md"))]
+
+
 files, total = [], 0
-for base in ("kernel", "bin", "profiles"):
-    for f in glob.glob(os.path.join(root, base, "**", "*"), recursive=True):
-        if os.path.isfile(f) and not f.endswith((".json",)):
-            try:
-                n = _real_refs(open(f, errors="ignore").read(), sym)
-            except Exception:
-                n = 0
-            if n > 0:
-                files.append(f); total += n
+for f in _w4_search_files(root, pp):
+    try:
+        n = _real_refs(open(f, errors="ignore").read(), sym)
+    except Exception:
+        n = 0
+    if n > 0:
+        files.append(f); total += n
 nfiles = len(set(files))
 ok = total >= min_hits and nfiles >= 2
 if ok:
