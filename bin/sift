@@ -35,6 +35,6 @@ case "$cmd" in
                  validate) shift; . "$SIFT_PLUGIN_ROOT/kernel/scaffold.sh"; sift_packet_validate "$@" ;;
                  *)        echo "[sift] usage: sift packet {new <id> [--profile P]|validate <id>}" >&2; exit 0 ;;
                esac ;;
-  "")          echo "[sift] usage: sift {version|plan|execute|review|state|status|verify-log|selftest|setup|wave-review|next|doctor|focus|init-claudemd|packet|sync} ..." >&2; exit 0 ;;
+  "")          echo "[sift] usage: sift {version|plan|execute|review|state|status|verify-log|migrate-log|selftest|setup|wave-review|coverage|next|abort|supersede|audit|doctor|focus|init-claudemd|packet|sync} ..." >&2; exit 0 ;;
   *)           echo "[sift] unknown subcommand '$cmd' (fail-soft, no-op)" >&2; exit 0 ;;
 esac
