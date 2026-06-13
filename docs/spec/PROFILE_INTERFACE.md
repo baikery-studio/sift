@@ -225,13 +225,19 @@ kernel.
 > terms. The kernel stays domain-neutral precisely because it never knows what W4
 > checks.
 
-### 3.4 Soft-floor rigor, `soft_floors[]` (data, not code)
-A profile's `soft_floors[]` declare witness-reason patterns that must cap a verdict at
-`partially_confirmed` (never `confirmed`). As built, the witness pipeline enforces this
-cap directly, a soft-floored witness lands `partially_confirmed`. (A standalone
-`check-w3-rigor` CI gate that scans for these patterns is **Planned. NOT
-implemented**; see the SIFT_HARNESS_PLUGIN.md status banner.) Categories are
-profile-defined; the mechanism is kernel-owned.
+### 3.4 Soft-floor rigor, `soft_floors[]` (the allowlist of acknowledged limitations)
+A profile's `soft_floors[]` declare the named limitation categories an operator may
+explicitly accept for a packet. The cap is **operator-acknowledged, not automatic**: a
+packet declares `soft_floor: <category>` in its frontmatter to accept a known limitation
+for that work. At review the kernel validates the declared category against the profile's
+`soft_floors[].category` allowlist, and a KNOWN category caps the terminal at
+`partially_confirmed` (still witness-bound, same binding as `confirmed`); an UNKNOWN
+category fails closed (`review_failed`). A packet that declares no `soft_floor` reaches
+full `confirmed`. The cap is deliberately not automatic, an automatic floor on a common
+witness mode (e.g. a no-git reproduce) would make `partially_confirmed` the default and
+hollow out `confirmed`. (A standalone `check-w3-rigor` CI gate that scans for tampering
+patterns is **Planned. NOT implemented**; see the SIFT_HARNESS_PLUGIN.md status banner.)
+Categories are profile-defined; the cap mechanism is kernel-owned.
 
 ---
 

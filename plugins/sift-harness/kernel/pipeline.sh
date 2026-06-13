@@ -148,7 +148,28 @@ except Exception: print("unknown")' 2>/dev/null || echo unknown)"
   vj="$(python3 -c 'import json,sys; print(json.dumps({"verdict":"pass","feature_sha":sys.argv[1],"w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4],"w3_mode":sys.argv[5]}))' "$fsha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}")"
   veh="$(log_append review.verdict reviewing reviewing "$id" "$vj")"
   we="$(python3 -c 'import json,sys; print(json.dumps({"verdict_event":sys.argv[1],"feature_sha":sys.argv[2],"extended_hash":sys.argv[3],"w1_ok":True,"w2_hash":sys.argv[4],"w3_hash":sys.argv[5],"w4_hash":sys.argv[6]}))' "$veh" "$fsha" "$esha" "$w2h" "$w3h" "$w4h")"
-  log_append lane.transition reviewing confirmed "$id" "$we" >/dev/null
-  rm -f "$SIFT_STATE/focus"   # work confirmed: release the scope-guard focus
-  echo "[sift] confirmed $id (witness-bound to verdict event $veh)"
+  # Soft-floor cap (operator-acknowledged): if the packet declares an accepted soft_floor,
+  # validate it against the profile's soft_floors[].category allowlist. A KNOWN category
+  # caps the terminal to partially_confirmed (still witness-bound). An UNKNOWN category
+  # fails closed (review_failed). No declaration -> full confirmed.
+  local terminal=confirmed sfloor
+  sfloor="$(packet_field "$id" soft_floor 2>/dev/null || true)"
+  if [ -n "$sfloor" ]; then
+    if python3 -c 'import json,sys
+try: cats=[f.get("category") for f in json.load(open(sys.argv[1])).get("soft_floors",[])]
+except Exception: cats=[]
+sys.exit(0 if sys.argv[2] in cats else 1)' "$pd/profile.json" "$sfloor"; then
+      terminal=partially_confirmed
+    else
+      log_append lane.transition reviewing review_failed "$id" >/dev/null
+      echo "[sift] unknown soft_floor '$sfloor' (not in profile soft_floors) — review_failed" >&2; return 1
+    fi
+  fi
+  log_append lane.transition reviewing "$terminal" "$id" "$we" >/dev/null
+  rm -f "$SIFT_STATE/focus"   # work resolved: release the scope-guard focus
+  if [ "$terminal" = partially_confirmed ]; then
+    echo "[sift] partially_confirmed $id (soft_floor: $sfloor; witness-bound to verdict event $veh)"
+  else
+    echo "[sift] confirmed $id (witness-bound to verdict event $veh)"
+  fi
 }
