@@ -30,14 +30,17 @@ GENESIS = "0" * 64
 TRANSITIONS = {
     ("submitted", "packeted"),
     ("packeted", "executing"),
-    ("executing", "acceptance_met"), ("executing", "failed"), ("executing", "blocked"),
+    ("executing", "acceptance_met"), ("executing", "failed"),
     ("acceptance_met", "reviewing"),
     ("reviewing", "confirmed"), ("reviewing", "partially_confirmed"), ("reviewing", "review_failed"),
     ("partially_confirmed", "reviewing"),
     ("review_failed", "executing"),
     ("failed", "executing"),
-    ("blocked", "packeted"),
 }
+# `blocked` removed (AR-2): no code path ever emitted it, and `sift abort` provides in-band
+# recovery (reviewing->review_failed, executing->failed). `superseded` is handled at replay
+# (retirement from any reached state) and emitted by `sift supersede`. `partially_confirmed`
+# is emitted by the soft-floor cap (AR-3).
 REQUIRED_WE = ["verdict_event", "feature_sha", "extended_hash", "w1_ok", "w2_hash", "w3_hash", "w4_hash"]
 
 

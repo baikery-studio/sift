@@ -28,3 +28,20 @@ sift_abort() {
     *) echo "[sift] $id not in an abortable state (is '$st')" >&2; return 1 ;;
   esac
 }
+
+# sift_supersede <id> — retire a packet (e.g. a confirmed packet replaced by newer work,
+# or an obsolete one). Emits a chained lane.transition <current> superseded, which replay
+# accepts from any reached state, and clears focus if it owned it. A corrupt packet cannot
+# be retired (nothing legitimate to retire).
+sift_supersede() {
+  . "$_STATESH_DIR/log.sh"
+  local id="${1:-}"; [ -n "$id" ] || { echo "[sift] usage: sift supersede <id>" >&2; return 1; }
+  local st; st="$(project_state "$id")"
+  local sd="${SIFT_STATE:-$(config_path state)}"
+  case "$st" in
+    corrupt|superseded|submitted) echo "[sift] $id not supersedable (is '$st')" >&2; return 1 ;;
+  esac
+  log_append lane.transition "$st" superseded "$id" >/dev/null
+  [ "$(cat "$sd/focus" 2>/dev/null | tr -d '[:space:]')" = "$id" ] && rm -f "$sd/focus" 2>/dev/null || true
+  echo "[sift] superseded $id (was $st); retired"
+}
