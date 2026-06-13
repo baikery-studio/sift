@@ -29,6 +29,8 @@ jobs:
           python3 --version
       - name: sift selftest (keyless witness suite + coverage)
         run: ./bin/sift selftest
+      - name: eval-snapshot corpus regression (every confirmed packet's acceptance still passes)
+        run: bash scripts/run-corpus.sh
       - name: trust-log chain verification
         # No `|| true`: an empty/absent log verifies as "chain ok: 0 events" (exit 0),
         # so a non-zero exit here means a REAL tamper (exit 20-23) and must fail CI.
