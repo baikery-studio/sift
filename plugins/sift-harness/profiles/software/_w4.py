@@ -83,11 +83,17 @@ def _w4_search_files(root, packet):
               "__pycache__", ".venv", "venv", ".mypy_cache", ".pytest_cache"}
     wp = fm_get(packet, "wiring_paths")
     out = []
+    real_root = os.path.realpath(root)
     if wp:
         for spec in re.split(r"[,\s]+", wp.strip()):
             if not spec:
                 continue
-            base = os.path.join(root, spec)
+            # CONTAINMENT: resolve the spec and skip any that escapes the repo root
+            # (../, absolute, or symlink-out). A packet must not direct W4 to search or
+            # read outside the repository (matches the toy/prose path-containment guards).
+            base = os.path.realpath(os.path.join(root, spec))
+            if base != real_root and not base.startswith(real_root + os.sep):
+                continue
             if os.path.isfile(base):
                 out.append(base)
             else:
