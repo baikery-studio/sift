@@ -14,7 +14,8 @@ SIFT_REVIEWS="${SIFT_REVIEWS:-$(config_path reviews)}"
 
 sift_audit() {
   case "${1:-}" in
-    --help|-h|"") echo "usage: sift audit <packet_id> — replay-verify a confirmed packet from the repo + log"; [ -z "${1:-}" ] && return 1 || return 0 ;;
+    --bundle)     shift; sift_audit_bundle "$@"; return $? ;;
+    --help|-h|"") echo "usage: sift audit <packet_id> | sift audit --bundle <file> — replay-verify a confirmed packet from the repo+log, or a portable bundle on a foreign machine"; [ -z "${1:-}" ] && return 1 || return 0 ;;
   esac
   local id="$1"
   if ! verify_log_chain >/dev/null 2>&1; then
@@ -29,4 +30,79 @@ sift_audit() {
     *) echo "AUDIT FAIL ($id): replays as '$st', not a witness-bound terminal" >&2; return 1 ;;
   esac
   python3 "$_AUDIT_DIR/_audit.py" "$SIFT_LOG" "$id" "$SIFT_REVIEWS"
+}
+
+# sift audit --bundle <file> — replay-verify a portable bundle on a FOREIGN machine, with no
+# .harness / no other repo state present. Extracts the bundle to a temp dir and routes through
+# the EXACT same three checks as the in-place audit (chain verify -> project_state terminal ->
+# artifact re-hash), then surfaces the bundle's feature_sha cross-repo provenance.
+sift_audit_bundle() {
+  local bundle="${1:-}"
+  [ -n "$bundle" ] && [ -f "$bundle" ] || { echo "AUDIT FAIL: bundle not found: $bundle" >&2; return 1; }
+  local td; td="$(mktemp -d)"
+  if ! python3 "$_AUDIT_DIR/_export.py" extract "$bundle" "$td" 2>/dev/null; then
+    echo "AUDIT FAIL: bundle is malformed (cannot extract / missing manifest or log)" >&2; rm -rf "$td"; return 1
+  fi
+  local blog="$td/log.jsonl" brev="$td/reviews"
+  local pid fsha
+  pid="$(python3 -c 'import json,sys
+try: print((json.load(open(sys.argv[1])) or {}).get("packet_id",""))
+except Exception: print("")' "$td/bundle.json" 2>/dev/null)"
+  [ -n "$pid" ] || { echo "AUDIT FAIL: bundle manifest has no packet_id" >&2; rm -rf "$td"; return 1; }
+  # feature_sha for the provenance check comes from the CHAIN-AUTHENTICATED terminal event in
+  # the carried log (its event_hash covers witness_evidence, and _valid_witness ties it to the
+  # verdict event), NOT from bundle.json — bundle.json is unsigned metadata an attacker could
+  # rewrite to spoof a PRESENT provenance against the wrong commit.
+  fsha="$(python3 -c 'import json,sys
+log,pid=sys.argv[1],sys.argv[2]; fs=""
+for ln in open(log):
+    if not ln.strip(): continue
+    try: ev=json.loads(ln)
+    except Exception: continue
+    if ev.get("kind")=="lane.transition" and ev.get("packet_id")==pid and ev.get("to") in ("confirmed","partially_confirmed"):
+        fs=(ev.get("witness_evidence") or {}).get("feature_sha","") or ""
+print(fs)' "$blog" "$pid" 2>/dev/null)"
+
+  local rc=0 reason=""
+  # check 1: the carried chain prefix re-derives clean.
+  if ! SIFT_LOG="$blog" verify_log_chain >/dev/null 2>&1; then
+    rc=1; reason="bundle log chain does not verify (tampered)"
+  fi
+  # check 2: the packet replays to a witness-bound terminal from the bundle alone.
+  if [ "$rc" -eq 0 ]; then
+    local st; st="$(SIFT_LOG="$blog" SIFT_REVIEWS="$brev" project_state "$pid")"
+    case "$st" in
+      confirmed|partially_confirmed) ;;
+      *) rc=1; reason="replays as '$st', not a witness-bound terminal" ;;
+    esac
+  fi
+  # check 3: the bound artifacts re-hash (self-sufficient _audit.py reruns chain + replay too).
+  local body=""
+  if [ "$rc" -eq 0 ]; then
+    body="$(python3 "$_AUDIT_DIR/_audit.py" "$blog" "$pid" "$brev" 2>&1)" || { rc=1; reason="$body"; }
+  fi
+
+  # feature_sha CROSS-REPO PROVENANCE (advisory but never silent): resolve the bundle's
+  # feature_sha against the repo audit runs in. PRESENT = the reviewed commit is here; NOT-FOUND
+  # = the bundle vouches for a commit this repo does not contain (a stranger must see this, or a
+  # bundle from repo A verifies next to unrelated repo B unflagged).
+  local repo="${SIFT_REPO_ROOT:-$(pwd)}" prov
+  if [ -z "$fsha" ] || [ "$fsha" = nogit ]; then
+    prov="feature_sha: (none recorded in bundle)"
+  elif ! git -C "$repo" rev-parse --git-dir >/dev/null 2>&1; then
+    prov="feature_sha $fsha: NOT-FOUND (cannot resolve: no git in audit repo)"
+  elif git -C "$repo" cat-file -e "${fsha}^{commit}" >/dev/null 2>&1; then
+    prov="feature_sha $fsha: PRESENT (the reviewed commit is in this repo)"
+  else
+    prov="feature_sha $fsha: NOT-FOUND (the bundle vouches for a commit not in this repo)"
+  fi
+
+  rm -rf "$td"
+  if [ "$rc" -ne 0 ]; then
+    echo "AUDIT FAIL (bundle:$pid): $reason" >&2
+    echo "  $prov" >&2
+    return 1
+  fi
+  printf '%s\n' "$body"
+  echo "  $prov"
 }
