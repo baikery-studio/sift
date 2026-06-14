@@ -43,6 +43,68 @@ _signatures_gate() {
   python3 "$SIFT_PLUGIN_ROOT/kernel/_signatures.py" "${_sg_files[@]}"
 }
 
+# TAMPER-REVIEW-1: re-run the anti-tamper signature scan at REVIEW time over the packet's whole
+# committed CHANGED-FILE SET, not just the two files the execute-time gate sees. A weakened
+# sibling test, a commented-out assert, a continue-on-error, an early-return that dead-codes a
+# test — introduced into ANY changed file after execute — would otherwise ride to a clean
+# `confirmed` (sift_review never re-scanned). Review fails closed on a dirty tree, so the
+# meaningful set is the committed diff: prefer the pinned manifest's base_sha..HEAD, then
+# HEAD~1..HEAD, then the working diff. No git -> nothing committed to scan (return clean).
+# Reuses the EXISTING _signatures.py scanner and blocking semantics; trust core untouched.
+_signatures_gate_review() {
+  local id="$1" root="$SIFT_REPO_ROOT" base="" man range="" tmpd rc=0
+  git -C "$root" rev-parse HEAD >/dev/null 2>&1 || return 0
+  man="$(ls -1t "$SIFT_STATE/runs/$id/"*.json 2>/dev/null | head -1)"
+  if [ -n "$man" ]; then
+    base="$(python3 -c 'import json,sys
+try: print(json.load(open(sys.argv[1])).get("base_sha","") or "")
+except Exception: print("")' "$man" 2>/dev/null || true)"
+  fi
+  # Resolve the commit RANGE base..HEAD: the pinned manifest base (when it is a real ancestor
+  # distinct from HEAD), else HEAD~1..HEAD. Empty range => a single-commit repo (no parent).
+  if [ -n "$base" ] && [ "$base" != nogit ] && git -C "$root" rev-parse --verify --quiet "$base^{commit}" >/dev/null 2>&1 \
+     && [ "$(git -C "$root" rev-parse "$base" 2>/dev/null)" != "$(git -C "$root" rev-parse HEAD 2>/dev/null)" ]; then
+    range="$base..HEAD"
+  elif git -C "$root" rev-parse --verify --quiet HEAD~1 >/dev/null 2>&1; then
+    range="HEAD~1..HEAD"
+  fi
+  tmpd="$(mktemp -d)"
+  local -a _rv_files=()
+  if [ -n "$range" ]; then
+    # Scan the content of every file touched in EVERY commit in the range, AT THAT COMMIT — not
+    # just the net base..HEAD diff. A file added in one commit and deleted in a later one (to
+    # hide a tamper from the net diff) is still scanned at the commit that introduced it. The
+    # path is reconstructed under a tmp dir so _signatures.py's path-based test-file detection
+    # (e.g. tests/foo_test.py) still matches.
+    while IFS= read -r sha; do
+      [ -n "$sha" ] || continue
+      while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        git -C "$root" cat-file -e "$sha:$f" 2>/dev/null || continue   # deleted at this commit
+        # Namespace the snapshot by commit SHA: the same path touched in multiple commits must
+        # NOT overwrite (git log is newest-first, so a clean->tamper->clean sandwich on one file
+        # would otherwise leave only the final clean version on disk, hiding the tampered middle
+        # commit). The path suffix is preserved so _signatures.py still detects tests/foo_test.py.
+        mkdir -p "$tmpd/$sha/$(dirname "$f")" 2>/dev/null || continue
+        git -C "$root" show "$sha:$f" > "$tmpd/$sha/$f" 2>/dev/null || continue
+        _rv_files+=("$tmpd/$sha/$f")
+      done < <(git -C "$root" diff-tree --no-commit-id -r --name-only "$sha" 2>/dev/null)
+    done < <(git -C "$root" log --format=%H "$range" 2>/dev/null)
+  else
+    # Single-commit repo (no parent to diff against): scan the whole tracked HEAD tree, which IS
+    # the shipped set — so a tamper committed in the initial commit cannot pass unscanned.
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      [ -f "$root/$f" ] && _rv_files+=("$root/$f")
+    done < <(git -C "$root" ls-files 2>/dev/null)
+  fi
+  if [ "${#_rv_files[@]}" -gt 0 ]; then
+    python3 "$SIFT_PLUGIN_ROOT/kernel/_signatures.py" "${_rv_files[@]}"; rc=$?
+  fi
+  rm -rf "$tmpd" 2>/dev/null || true
+  return $rc
+}
+
 sift_plan() {
   id="$1"; pf="$SIFT_PACKETS/$id.md"
   [ -f "$pf" ] || { echo "[sift] no packet: $id" >&2; return 1; }
@@ -125,6 +187,13 @@ sift_review() {
     fi
   else
     w2mode="fresh_clone_unavailable"
+  fi
+  # TAMPER-REVIEW-1: re-scan the committed changed set for anti-tamper signatures BEFORE minting
+  # the terminal. The execute-time gate only saw two files; a weakened sibling test introduced
+  # after execute is caught here. Same fail-closed semantics as the execute gate.
+  if ! _signatures_gate_review "$id" 2>>"$SIFT_STATE/signatures.log"; then
+    log_append lane.transition reviewing review_failed "$id" >/dev/null
+    echo "[sift] review: anti-tamper signature hit in the changed set (see $SIFT_STATE/signatures.log) — fix the flagged file and re-execute" >&2; return 1
   fi
   local w2out; w2out="$(bash "$pd/acceptance/run.sh" "$pf" "$id" 2>/dev/null || true)"
   printf '%s' "$w2out" | _json_true passed \
