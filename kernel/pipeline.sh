@@ -71,7 +71,17 @@ sift_execute() {
     packeted)      log_append lane.transition packeted executing "$id" >/dev/null ;;
     failed)        log_append lane.transition failed executing "$id" >/dev/null ;;       # re-execute after a failed run
     review_failed) log_append lane.transition review_failed executing "$id" >/dev/null ;; # re-execute after a rejected review
-    *) echo "[sift] $id not re-executable from '$cur'" >&2; return 1 ;;
+    *) local _hint
+       case "$cur" in
+         submitted)               _hint="run \`sift plan $id\` first" ;;
+         acceptance_met)          _hint="already executed — run \`sift review $id\`" ;;
+         reviewing)               _hint="stuck in review — \`sift abort $id\` then re-execute" ;;
+         confirmed|partially_confirmed) _hint="already done (\`sift state $id\`)" ;;
+         unknown)                 _hint="no such packet — \`sift packet new $id\` or check the id" ;;
+         corrupt)                 _hint="log reads corrupt — \`sift verify-log\`" ;;
+         *)                       _hint="check \`sift state $id\`" ;;
+       esac
+       echo "[sift] $id not executable from '$cur' -> next: $_hint" >&2; return 1 ;;
   esac
   manifest_write "$id" >/dev/null 2>&1 || true   # pin run provenance (base/feature_sha)
   if ! _signatures_gate "$id" 2>>"$SIFT_STATE/signatures.log"; then
@@ -89,7 +99,18 @@ sift_execute() {
 
 sift_review() {
   id="$1"; pf="$SIFT_PACKETS/$id.md"; pd="$(_prof_dir "$id")"
-  [ "$(project_state "$id")" = acceptance_met ] || { echo "[sift] $id not 'acceptance_met'" >&2; return 1; }
+  local _rs; _rs="$(project_state "$id")"
+  if [ "$_rs" != acceptance_met ]; then
+    local _h
+    case "$_rs" in
+      submitted)                      _h="run \`sift plan $id\` then \`sift execute $id\`" ;;
+      packeted|failed|review_failed)  _h="run \`sift execute $id\` first" ;;
+      confirmed|partially_confirmed)  _h="already confirmed (\`sift state $id\`)" ;;
+      unknown)                        _h="no such packet — check the id" ;;
+      *)                              _h="check \`sift state $id\`" ;;
+    esac
+    echo "[sift] $id not 'acceptance_met' (is '$_rs') -> next: $_h" >&2; return 1
+  fi
   log_append lane.transition acceptance_met reviewing "$id" >/dev/null
   mkdir -p "$SIFT_REVIEWS"
   # W2 reproduce: independent, from clean (committed) state, writing a REAL artifact.

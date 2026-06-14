@@ -9,7 +9,24 @@ export SIFT_PLUGIN_ROOT="$(cd "$SIFT_BIN/.." && pwd)"
 export SIFT_REPO_ROOT="${SIFT_REPO_ROOT:-${CLAUDE_PROJECT_DIR:-$(pwd)}}"
 
 cmd="${1:-}"; [ "$#" -gt 0 ] && shift
+_sift_usage() {
+  echo "usage: sift <verb> [args]   (the build-rigor harness; 'done' is witness-proven)"
+  echo "  plan|execute|review <id>   drive a packet plan -> execute -> review -> confirmed"
+  echo "  state <id>                 the packet's replayed state (confirmed/.../corrupt/unknown)"
+  echo "  status | next <wave>       operator board / next actionable packet in a wave"
+  echo "  drive <wave>               autonomous loop a wave to ALL-CONFIRMED (if available)"
+  echo "  packet new <id> [--profile P] | validate <id>"
+  echo "  setup | init-claudemd      bootstrap a repo / make the loop a standing rule"
+  echo "  verify-log | migrate-log   tamper-evidence check / re-chain an old-schema log"
+  echo "  audit <id> | export <id>   second-party replay-verify / portable bundle (if available)"
+  echo "  doctor | coverage <wave>   re-verify confirmeds / advisory wave gap-finding"
+  echo "  abort <id> | supersede <id>   in-band recovery / retire a packet"
+  echo "  selftest | sync | demo     suite / regenerate host bundles / 30-second proof"
+  echo "  run \`bash \${SIFT_PLUGIN_ROOT:-.}/scripts/demo.sh\` or 'sift demo' to see confirmed->corrupt"
+}
 case "$cmd" in
+  help|--help|-h)  _sift_usage ;;
+  demo)        bash "$SIFT_PLUGIN_ROOT/scripts/demo.sh" "$@" ;;
   version)     cat "$SIFT_PLUGIN_ROOT/VERSION" 2>/dev/null || echo "0.0.0-spine" ;;
   plan|execute|review)
                . "$SIFT_PLUGIN_ROOT/kernel/pipeline.sh"; "sift_$cmd" "$@" ;;

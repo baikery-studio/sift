@@ -39,7 +39,7 @@ sift_supersede() {
   local st; st="$(project_state "$id")"
   local sd="${SIFT_STATE:-$(config_path state)}"
   case "$st" in
-    corrupt|superseded|submitted) echo "[sift] $id not supersedable (is '$st')" >&2; return 1 ;;
+    corrupt|superseded|submitted|unknown) echo "[sift] $id not supersedable (is '$st')" >&2; return 1 ;;
   esac
   log_append lane.transition "$st" superseded "$id" >/dev/null
   [ "$(cat "$sd/focus" 2>/dev/null | tr -d '[:space:]')" = "$id" ] && rm -f "$sd/focus" 2>/dev/null || true

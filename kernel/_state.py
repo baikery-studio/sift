@@ -131,7 +131,9 @@ def _packet_path(packet_id, reviews_dir):
 
 def project_state(log_path, packet_id, reviews_dir):
     if not os.path.exists(log_path):
-        return "submitted"
+        # no log at all: a real (but unplanned) packet has a packet file -> submitted; a
+        # nonexistent id (typo) has neither file nor events -> unknown, not a misleading submitted.
+        return "submitted" if os.path.exists(_packet_path(packet_id, reviews_dir)) else "unknown"
     lines = [ln.rstrip("\n") for ln in open(log_path) if ln.strip()]
     # Always verify the full hash-chain (HD2-1: the whole-file-SHA checkpoint was dropped —
     # measured ~1.4x, not load-bearing, and a keyless file checkpoint is forgeable by any
@@ -182,7 +184,13 @@ def project_state(log_path, packet_id, reviews_dir):
                     return "corrupt"
                 used_verdicts.add(we["verdict_event"])
         state = to
-    return state or "submitted"
+    if state is None:
+        # no transitions for this id. A real submitted packet has a packet file; a nonexistent
+        # id with no events and no file is "unknown" (a typo), not a misleading "submitted".
+        if not by_hash and not os.path.exists(_packet_path(packet_id, reviews_dir)):
+            return "unknown"
+        return "submitted"
+    return state
 
 
 if __name__ == "__main__":
