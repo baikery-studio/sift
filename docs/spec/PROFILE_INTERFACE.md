@@ -37,6 +37,18 @@ The set overloads a few words; these are the canonical meanings.
   not "a model judged the code" — the deterministic quartet (W1/W2/scope-guard/W4)
   carries the real weight, and under Claude Code the driving agent is the model that
   reviews the diff.
+  - **Host-verdict mode** (opt-in, still keyless and zero egress): instead of minting its
+    own structural pass, W3 VALIDATES an agent-authored R1-R13 rubric verdict. The validator
+    has semantic teeth: each rubric value must begin with a recognised pass or fail token
+    (anything else fails closed), and a top-level `pass` while ANY Rk reads a fail token is a
+    self-contradicting verdict and is REJECTED. So the rubric is a real gate, not decoration.
+    The agent lands its verdict through the sanctioned `sift w3-verdict` verb (the scope guard
+    still denies a direct `.harness/` write).
+  - **`w3_mode` evidence**: a confirmed records which regime ran (`host` vs `keyless`) as an
+    ADDITIVE, OPTIONAL field in `witness_evidence`, surfaced by `sift audit`. It is NOT in the
+    kernel's `REQUIRED_WE`: a confirmed that lacks it (every confirmed minted before this field
+    existed) still replays clean. A policy MAY require host mode, but absence never invalidates
+    a confirmed already in the chain.
 
 **A note on `schema_version` (four distinct counters, never one).** Packet
 frontmatter carries `schema_version: v1`, the *packet* schema, matching the

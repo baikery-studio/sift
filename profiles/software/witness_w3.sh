@@ -73,6 +73,22 @@ rub=d.get("rubric")
 if not isinstance(rub,dict): print("no-rubric"); sys.exit(1)
 missing=[k for k in ("R%d"%i for i in range(1,14)) if k not in rub]
 if missing: print("incomplete-rubric"); sys.exit(1)
+# Rubric VALUES carry the real teeth (W3-SEM-1): each Rk first token must be in a CLOSED
+# allowlist of pass/fail tokens. A closed allowlist (not a startswith prefix) so "passable"
+# does not count as a pass and "failsafe" does not count as a fail — an unrecognised token is
+# not a verdict and fails closed (rubric-value-not-a-token). A top-level "pass" while ANY Rk is
+# a fail token is a self-contradicting verdict -> reject. Without this the rubric was
+# decoration: an all-fail rubric under a "pass" verdict slipped through.
+PASS_TOKENS={"pass","passed","passing","ok"}
+FAIL_TOKENS={"fail","failed","failing","reject","rejected"}
+def _tok(x):
+    s=str(x).strip().lower()
+    return s.split()[0] if s else ""
+toks={k:_tok(rub.get(k)) for k in ("R%d"%i for i in range(1,14))}
+bad=[k for k,t in toks.items() if t not in PASS_TOKENS and t not in FAIL_TOKENS]
+if bad: print("rubric-value-not-a-token"); sys.exit(1)
+fails=[k for k,t in toks.items() if t in FAIL_TOKENS]
+if fails: print("rubric-fail-under-pass"); sys.exit(1)
 print("pass")'
 }
 
