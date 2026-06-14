@@ -69,6 +69,47 @@ $gaps
 EOF
 }
 
+# ORCH-3 economic-stop governor: count THIS packet's FAILED transitions (executing->failed +
+# reviewing->review_failed) from the HASH-CHAINED, VERIFIED log (never a forgeable side-counter)
+# and, at >= max_retries, emit ONE chained orch.decision{halt,retry_ceiling} and signal HALT
+# (rc 1). Below the ceiling: emit nothing, signal CONTINUE (rc 0). REFUSES to govern an already
+# confirmed/superseded packet (rc 0, no decision) — a brake may never erase a witness-bound
+# completion. A halt is the ABSENCE of dispatch + a logged, INERT event; it can mint no terminal.
+_drive_count_failed() {
+  python3 -c 'import json,sys
+P=sys.argv[2]; n=0
+for ln in open(sys.argv[1]):
+    if not ln.strip(): continue
+    try: e=json.loads(ln)
+    except Exception: continue
+    if e.get("packet_id")!=P or e.get("kind")!="lane.transition": continue
+    if (e.get("from"),e.get("to")) in (("executing","failed"),("reviewing","review_failed")): n+=1
+print(n)' "$SIFT_LOG" "$1" 2>/dev/null || echo 0
+}
+
+sift_drive_governor() {
+  local pid="${1:-}" ceil="${2:-}"
+  [ -n "$pid" ] && [ -n "$ceil" ] || { echo "[sift] usage: sift_drive_governor <packet_id> <max_retries>" >&2; return 2; }
+  # never derive a halt from a corrupt chain (surface corrupt like the rest of the spine).
+  if ! verify_log_chain >/dev/null 2>&1; then
+    echo "[sift] governor $pid: log chain does not verify — refusing to halt off a corrupt log" >&2; return 2
+  fi
+  # refuse to govern a real, witness-bound completion (or a retired packet): a stop must never
+  # contradict or erase a confirmed.
+  local st; st="$(project_state "$pid")"
+  case "$st" in
+    confirmed|partially_confirmed|superseded) return 0 ;;
+  esac
+  local n; n="$(_drive_count_failed "$pid")"
+  if [ "$n" -ge "$ceil" ]; then
+    SIFT_ACTOR=orchestrator log_append orch.decision _ _ "$pid" \
+      "$(python3 -c 'import json,sys;print(json.dumps({"action":"halt","reason":"retry_ceiling","retries":int(sys.argv[1]),"ceiling":int(sys.argv[2])}))' "$n" "$ceil")" >/dev/null
+    echo "[sift] governor: HALT '$pid' — $n failed transitions >= retry ceiling $ceil" >&2
+    return 1
+  fi
+  return 0
+}
+
 sift_drive() {
   case "${1:-}" in
     --help|-h|"") echo "usage: sift drive <wave-id> — drive the wave to ALL-CONFIRMED then wave-review (done is derived from the log, never asserted)"; [ -z "${1:-}" ] && return 1 || return 0 ;;
@@ -100,10 +141,19 @@ sift_drive() {
     fi
 
     local st; st="$(project_state "$id")"
+    # ORCH-3 economic stop: the per-packet retry-ceiling governor, counted from the VERIFIED
+    # chain against the packet's declared max_retries. A wedged packet (executing->failed cycle)
+    # halts here with a chained orch.decision instead of churning forever; the governor refuses
+    # to touch a confirmed. This is the load-bearing brake; the in-memory no-progress guard below
+    # is a backstop for a packet that never even transitions (e.g. a plan that keeps failing).
+    local _mr; _mr="$(packet_field "$id" max_retries 2>/dev/null)"; case "$_mr" in ''|*[!0-9]*) _mr=6 ;; esac
+    if ! sift_drive_governor "$id" "$_mr"; then
+      echo "[sift] drive $wid: governor halted '$id' at its retry ceiling ($_mr) — stopping" >&2; return 1
+    fi
     local key="$id:$st"
     if [ "$key" = "$last_key" ]; then stall=$((stall + 1)); else stall=0; last_key="$key"; fi
     if [ "$stall" -ge "$retry_ceiling" ]; then
-      sift_orch_log "$wid" orch.decision "$(printf '{"action":"halt","reason":"retry_ceiling","packet":"%s","state":"%s"}' "$id" "$st")" 2>/dev/null || true
+      sift_orch_log "$wid" orch.decision "$(printf '{"action":"halt","reason":"no_progress","packet":"%s","state":"%s"}' "$id" "$st")" 2>/dev/null || true
       echo "[sift] drive $wid: no progress on '$id' (state '$st') after $retry_ceiling attempts — halting" >&2; return 1
     fi
 
