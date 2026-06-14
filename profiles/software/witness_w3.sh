@@ -43,10 +43,25 @@ _w3_keyless() {
 
 # Host-verdict mode (UP-1, zero egress): instead of W3 minting its own structural
 # pass, the driving agent writes an R1-R13 rubric verdict to the W3 artifact and W3
-# VALIDATES it. On by SIFT_W3_REQUIRE_HOST_VERDICT=1 or witnesses.w3.require_host_verdict
-# in profile.json. No network, no keys — the agent in the loop is the reviewer.
+# VALIDATES it. No network, no keys — the agent in the loop is the reviewer.
+#
+# SOTA-2: host mode is the DEFAULT under a detected agent host. The signal is the EXPLICIT
+# SIFT_AGENT_HOST=1 that hooks/sessionstart.sh sets (a SessionStart hook only fires inside a
+# live agent host, so its execution IS the host signal). It is deliberately NOT keyed off
+# ambient CLAUDE_PROJECT_DIR: CI routinely exports that, and auto-detecting it would silently
+# flip CI into requiring a host verdict and break the keyless selftest. Precedence:
+#   1. SIFT_W3_REQUIRE_HOST_VERDICT=1  -> force host mode on (explicit override).
+#   2. SIFT_W3_HOST_VERDICT=off        -> force keyless (explicit opt-out of the auto-default).
+#   3. SIFT_AGENT_HOST=1               -> agent host present -> host mode (the SOTA-2 default).
+#   4. profile witnesses.w3.require_host_verdict: true.
+# Offline / CI (none of the above) stays KEYLESS, so the selftest is unchanged.
 _w3_host_mode() {
   [ "${SIFT_W3_REQUIRE_HOST_VERDICT:-}" = "1" ] && return 0
+  # opt-out is forgiving: off/0/false/no, any case, trimmed (it only ever makes W3 LESS strict,
+  # so a lenient match cannot weaken trust — it falls back to the keyless structural floor).
+  _hv="$(printf '%s' "${SIFT_W3_HOST_VERDICT:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  case "$_hv" in off|0|false|no) return 1 ;; esac
+  [ "${SIFT_AGENT_HOST:-}" = "1" ] && return 0
   python3 -c 'import json,sys
 try: v=json.load(open(sys.argv[1]))["witnesses"]["w3"].get("require_host_verdict",False)
 except Exception: v=False
