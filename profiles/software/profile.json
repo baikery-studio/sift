@@ -27,7 +27,8 @@
       "mode": "keyless",
       "require_host_verdict": false,
       "note": "Zero egress always (no model, no network, no keys). Under a detected agent host (the explicit SIFT_AGENT_HOST=1 the SessionStart hook sets) W3 defaults to validating an agent-written R1-R13 rubric verdict, landed via 'sift w3-verdict', with a rubric-VALUE check (an all-fail rubric under a pass verdict is rejected). Offline/CI (no SIFT_AGENT_HOST) stays keyless structural so the selftest is unchanged. SIFT_W3_REQUIRE_HOST_VERDICT=1 or this require_host_verdict flag force host mode; SIFT_W3_HOST_VERDICT=off opts back out. require_host_verdict stays false so it never depends on an ambient host dir.",
-      "artifact": ".w3.json"
+      "artifact": ".w3.json",
+      "sign": false
     },
     "w4": {
       "impl": "witness_w4.sh",

@@ -8,9 +8,43 @@
 # Exit 0 = PASS, non-zero = FAIL with the exact reason. This is the moat: a party who
 # did not build the work can verify the claim, needing nothing but the repository.
 _AUDIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-. "$_AUDIT_DIR/config.sh"; . "$_AUDIT_DIR/log.sh"; . "$_AUDIT_DIR/state.sh"
+. "$_AUDIT_DIR/config.sh"; . "$_AUDIT_DIR/log.sh"; . "$_AUDIT_DIR/state.sh"; . "$_AUDIT_DIR/sign.sh"
 SIFT_LOG="${SIFT_LOG:-$(config_path log)}"
 SIFT_REVIEWS="${SIFT_REVIEWS:-$(config_path reviews)}"
+
+# _audit_sig_check <log> <id> <reviews> — SOTA-3 signed-attestation check, run AFTER the three
+# witness checks pass. Resolves the verdict event the confirmed binds (we.verdict_event), reads
+# its recorded signer_pubkey, and if signed verifies the detached <id>.sig over that event_hash
+# (the canonical verdict bytes) with the recorded PUBLIC key. Echoes the attestation line; rc 1
+# only when a SIGNED claim fails to verify (a tampered/missing .sig) — an UNSIGNED confirmed is
+# tamper-evident only and returns 0 (keyless default). Asymmetric: needs only the public key.
+_audit_sig_check() {
+  local log="$1" id="$2" reviews="$3"
+  # (verdict_event_hash, signer_pubkey) for the terminal the confirmed binds.
+  local pair veh pub
+  pair="$(python3 -c 'import json,sys
+log,pid=sys.argv[1],sys.argv[2]; term=None; by={}
+for ln in open(log):
+    if not ln.strip(): continue
+    try: e=json.loads(ln)
+    except Exception: continue
+    if e.get("event_hash"): by[e["event_hash"]]=e
+    if e.get("kind")=="lane.transition" and e.get("packet_id")==pid and e.get("to") in ("confirmed","partially_confirmed"):
+        term=e
+veh=((term or {}).get("witness_evidence") or {}).get("verdict_event","")
+ve=by.get(veh) or {}
+pub=(ve.get("witness_evidence") or {}).get("signer_pubkey","") or ""
+print(veh+"\t"+pub)' "$log" "$id" 2>/dev/null)"
+  veh="${pair%%	*}"; pub="${pair#*	}"
+  if [ -z "$pub" ]; then
+    echo "  attestation   : tamper-evident only (unsigned)"; return 0
+  fi
+  local sig="$reviews/$id.sig"
+  if sift_verify "$pub" "$veh" "$sig"; then
+    echo "  attestation   : signed-attested (verdict signed by recorded key: $pub)"; return 0
+  fi
+  echo "  attestation   : SIGNATURE FAILED (recorded signer but .sig missing/invalid)" >&2; return 1
+}
 
 sift_audit() {
   case "${1:-}" in
@@ -29,7 +63,9 @@ sift_audit() {
     confirmed|partially_confirmed) ;;
     *) echo "AUDIT FAIL ($id): replays as '$st', not a witness-bound terminal" >&2; return 1 ;;
   esac
-  python3 "$_AUDIT_DIR/_audit.py" "$SIFT_LOG" "$id" "$SIFT_REVIEWS"
+  local _abody; _abody="$(python3 "$_AUDIT_DIR/_audit.py" "$SIFT_LOG" "$id" "$SIFT_REVIEWS")" || { printf '%s\n' "$_abody"; return 1; }
+  printf '%s\n' "$_abody"
+  _audit_sig_check "$SIFT_LOG" "$id" "$SIFT_REVIEWS"   # signed-attested / tamper-evident; rc 1 on a bad signature
 }
 
 # sift audit --bundle <file> — replay-verify a portable bundle on a FOREIGN machine, with no
@@ -77,9 +113,14 @@ print(fs)' "$blog" "$pid" 2>/dev/null)"
     esac
   fi
   # check 3: the bound artifacts re-hash (self-sufficient _audit.py reruns chain + replay too).
-  local body=""
+  local body="" sigline=""
   if [ "$rc" -eq 0 ]; then
     body="$(python3 "$_AUDIT_DIR/_audit.py" "$blog" "$pid" "$brev" 2>&1)" || { rc=1; reason="$body"; }
+  fi
+  # check 4 (SOTA-3): signed-attestation. An unsigned bundle reports tamper-evident only (rc 0);
+  # a signed verdict whose .sig fails/absent in the bundle fails closed.
+  if [ "$rc" -eq 0 ]; then
+    sigline="$(_audit_sig_check "$blog" "$pid" "$brev" 2>&1)" || { rc=1; reason="$sigline"; }
   fi
 
   # feature_sha CROSS-REPO PROVENANCE (advisory but never silent): resolve the bundle's
@@ -104,5 +145,6 @@ print(fs)' "$blog" "$pid" 2>/dev/null)"
     return 1
   fi
   printf '%s\n' "$body"
+  [ -n "$sigline" ] && printf '%s\n' "$sigline"
   echo "  $prov"
 }

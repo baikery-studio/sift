@@ -69,6 +69,28 @@ artifact with no chained verdict, a confirmed quoting a `reject` verdict, or a
 content-tampered artifact. Treat a PASS as "this confirmed is internally consistent and
 witness-bound in this log," not as a cryptographic attestation against a hostile author.
 
+## Signed attestation (opt-in)
+
+The default keyless audit is tamper-evident only. For the regulated / multi-party case, where
+Party B must prove Party A could not have forged it, `sift review --sign` adds a cryptographic
+attestation:
+
+- It signs the canonical verdict bytes (the chained `review.verdict` event_hash) with a LOCAL
+  key via `ssh-keygen -Y sign` (`SIFT_SIGN_KEY`, default `~/.ssh/id_ed25519`), writing a
+  detached `.harness/reviews/<id>.sig`. A local key is not egress, so this stays zero-network.
+- The signer's PUBLIC key is recorded inside the `review.verdict` event's witness_evidence, so
+  the chain hash covers signer identity (tamper-evident for free, no new mandatory field). It
+  is asymmetric: the auditor verifies with that public key (`ssh-keygen -Y verify`) and cannot
+  forge; the private key never leaves the reviewer/CI.
+- `sift audit` then verifies `<id>.sig` against the recorded public key over the verdict
+  event_hash and reports `signed-attested`; a tampered or missing signature on a signed verdict
+  FAILS audit. `sift review --sign` with no usable key FAILS closed (never a silent unsigned
+  confirmed). Keyless stays the default: no `--sign` means exactly the tamper-evident behaviour,
+  and an unsigned confirmed still audits PASS.
+
+The honest bound: signed = cryptographically attested by the keyholder (a party distinct from
+the worker-agent that produced the diff); unsigned = tamper-evident only.
+
 ## Provenance
 
 The witness evidence records `feature_sha` (the commit the work was reviewed against)
