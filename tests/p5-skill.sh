@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; SIFT="$ROOT/bin/sift"
 SK="$ROOT/skills/sift-workflow/SKILL.md"
 [ -f "$SK" ] || { echo "SKILL.md missing"; exit 1; }
-realverbs="$(grep -oE '^  [a-z][a-z|"-]*\)' "$SIFT" | sed -E 's/^ +//; s/\)$//' | tr '|' '\n' | sed 's/"//g' | grep -vE '^\*?$' | sort -u)"
-skillverbs="$(grep -oE '`sift +[a-z][a-z-]*' "$SK" | sed -E 's/^`sift +//' | sort -u)"
+realverbs="$(grep -oE '^  [a-z][a-z0-9|"-]*\)' "$SIFT" | sed -E 's/^ +//; s/\)$//' | tr '|' '\n' | sed 's/"//g' | grep -vE '^\*?$' | sort -u)"
+skillverbs="$(grep -oE '`sift +[a-z][a-z0-9-]*' "$SK" | sed -E 's/^`sift +//' | sort -u)"
 [ -n "$skillverbs" ] || { echo "SKILL.md references no sift verbs"; exit 1; }
 for v in $skillverbs; do
   printf '%s\n' "$realverbs" | grep -qx "$v" || { echo "SKILL.md references 'sift $v' (not a real subcommand)"; exit 1; }
