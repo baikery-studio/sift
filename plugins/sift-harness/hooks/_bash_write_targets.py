@@ -55,10 +55,14 @@ def write_targets(c):
     if _opaque(c):
         return ["__OPAQUE_BASH__"]
     t = []
-    # redirections: >, >>, clobber >| / >>|, fd-prefixed (1>|). Skip fd-dups and /dev/null.
-    for m in re.finditer(r"(\d*)>>?\|?\s*(&?)([^\s;|&<>]+)", c):
+    # redirections: >, >>, clobber >| / >>|, fd-prefixed (1>|), and the deprecated `>&word`
+    # both-streams-to-file form (with or without a space after &). Skip ONLY true fd-dups
+    # (a DIGIT target: `>&2`, `>&1`, `>2`) and the benign sinks /dev/null,/dev/stderr,/dev/stdout.
+    # A `>&word` with a NON-digit target is a real file write (`echo x >&/tmp/exfil` writes
+    # /tmp/exfil) — the old `if amp` skip dropped it, a scope-guard bypass (FENCE-DEVNULL-1).
+    for m in re.finditer(r"(\d*)>>?\|?\s*(&?)\s*([^\s;|&<>]+)", c):
         fd, amp, tgt = m.groups()
-        if amp or tgt.isdigit():
+        if tgt.isdigit():
             continue
         if tgt in ("/dev/null", "/dev/stderr", "/dev/stdout"):
             continue
@@ -71,8 +75,13 @@ def write_targets(c):
             if tok.startswith("-") or "=" in tok:
                 continue
             t.append(tok)
-    # a redirect operator present but no concrete target resolved (fd juggling) -> opaque.
-    if not t and re.search(r"(?<![0-9<])>|&>", c):
+    # A DANGLING redirect — an operator with no following target token (`cmd >`, `cmd >> ;`) —
+    # cannot be resolved, so fail closed. This is narrower than "any redirect with an empty
+    # target list": a redirect whose target WAS resolved and then intentionally skipped
+    # (`> /dev/null`, `2>&1`, `>&2`) is a no-op write, not an unresolvable one, and must stay
+    # read-only (FENCE-DEVNULL-1). `>&N` fd-dups are excluded (a stream dup is not a file write);
+    # `> $VAR` is already opaque via _OPAQUE. The lookbehind still excludes fd-prefixed forms.
+    if not t and re.search(r"(?<![0-9<])>>?\|?\s*(?:[;|\n]|$)", c):
         return ["__OPAQUE_BASH__"]
     return t
 
