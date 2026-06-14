@@ -17,7 +17,10 @@ cp -R "$ROOT/." "$tmp/" 2>/dev/null || true
 rm -rf "$tmp/opencode" "$tmp/.codex-plugin" "$tmp/codex" "$tmp/.cursor" "$tmp/.cursor-plugin" "$tmp/hermes" "$tmp/plugins/sift-harness"
 SIFT_PLUGIN_ROOT="$tmp" bash "$ROOT/kernel/sync.sh" >/dev/null 2>&1 || fail "sift sync failed"
 for d in opencode .codex-plugin codex .cursor .cursor-plugin hermes plugins/sift-harness; do
-  diff -r "$ROOT/$d" "$tmp/$d" >/dev/null 2>&1 || fail "$d/ has drifted from canonical source — run 'sift sync' and commit"
+  # Exclude transient Python bytecode: __pycache__/*.pyc are gitignored build artifacts, not
+  # canonical adapters. They differ between the warm source tree and a fresh regenerate (and are
+  # absent from a clean checkout), so comparing them makes this anti-drift check non-deterministic.
+  diff -r -x '__pycache__' -x '*.pyc' "$ROOT/$d" "$tmp/$d" >/dev/null 2>&1 || fail "$d/ has drifted from canonical source — run 'sift sync' and commit"
 done
 
 # 3. each non-Claude command adapter exists for every canonical verb
