@@ -56,8 +56,10 @@ def _events():
     return out
 
 
-confirmed, grade = None, None
+confirmed, grade, by_hash = None, None, {}
 for e in _events():
+    if e.get("event_hash"):
+        by_hash[e["event_hash"]] = e
     if e.get("kind") == "lane.transition" and e.get("to") in TERMINALS and e.get("packet_id") == pid:
         confirmed, grade = e, e.get("to")     # last terminal wins (matches replay's final state)
 if confirmed is None:
@@ -85,8 +87,20 @@ if problems:
     sys.stderr.write("AUDIT FAIL (%s):\n  %s\n" % (pid, "\n  ".join(problems)))
     sys.exit(1)
 
+# w3_mode is additive/optional evidence (W3-SEM-1): which review regime backed this confirmed
+# (host R1-R13 verdict vs keyless structural floor). Absent on pre-surfacing confirmeds, so it
+# defaults to a benign "unknown"; it is never required and never invalidates a confirmed. It is
+# a self-report, so cross-check it against the SAME field on the chained review.verdict event
+# (which the witness binding already authenticated): a match makes the label chain-consistent;
+# a mismatch is surfaced as a WARNING so a second party is not silently misled.
+_we_mode = we.get("w3_mode") or "unknown"
+_ve = by_hash.get(we.get("verdict_event")) if isinstance(we.get("verdict_event"), str) else None
+_ve_mode = ((_ve or {}).get("witness_evidence") or {}).get("w3_mode") or "unknown"
+_mode_note = "" if _we_mode == _ve_mode else " (WARNING: verdict event records '%s' — mismatch)" % _ve_mode
+
 print("AUDIT PASS (%s): witness-bound %s, re-verified from repo + log" % (pid, grade))
 print("  grade         : %s" % grade)
+print("  w3_mode       : %s%s" % (_we_mode, _mode_note))
 print("  feature_sha   : %s" % we.get("feature_sha"))
 print("  verdict_event : %s" % we.get("verdict_event"))
 print("  w2_hash       : %s" % we.get("w2_hash"))
