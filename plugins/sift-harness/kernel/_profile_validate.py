@@ -15,7 +15,7 @@ Extra top-level keys (e.g. "description") are allowed.
 
 Usage: _profile_validate.py <path/to/profile.json>   # exit 0 valid, 2 invalid
 """
-import json, os, sys
+import json, os, re, sys
 
 _REQUIRED = {
     "name": str,
@@ -24,6 +24,38 @@ _REQUIRED = {
     "acceptance": dict,
     "witnesses": dict,
 }
+
+
+def _ver_tuple(s):
+    """Parse 'X.Y.Z' (or X.Y) into a comparable int tuple; missing parts default to 0."""
+    parts = re.findall(r"\d+", s)
+    parts = (parts + ["0", "0", "0"])[:3]
+    return tuple(int(p) for p in parts)
+
+
+def _kernel_version():
+    """The running kernel's version from the VERSION file beside the kernel dir."""
+    try:
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "VERSION")) as f:
+            return f.read().strip()
+    except OSError:
+        return "0.0.0"
+
+
+def _kernel_satisfies(req):
+    """Does this kernel satisfy a profile's kernel_version range? Supports >=, ==, and an
+    exact 'X.Y.Z'. Fail OPEN only on an unparseable/empty requirement (treated as 'any')."""
+    req = (req or "").strip()
+    if not req:
+        return True
+    kv = _ver_tuple(_kernel_version())
+    m = re.match(r"^(>=|==|=)?\s*([0-9][0-9.]*)$", req)
+    if not m:
+        return True   # unknown form (e.g. a complex range) — do not block on what we can't parse
+    op, ver = m.group(1) or "==", _ver_tuple(m.group(2))
+    if op == ">=":
+        return kv >= ver
+    return kv == ver
 
 
 def validate(path):
@@ -47,6 +79,14 @@ def validate(path):
 
     if "soft_floors" in d and not isinstance(d["soft_floors"], list):
         errs.append("soft_floors must be a list")
+
+    # kernel_version is a COMPATIBILITY RANGE, not just a string: a profile written against a
+    # FUTURE kernel must be rejected at load (fail closed), not silently accepted. Supports the
+    # simple forms profiles use: ">=X.Y[.Z]", "X.Y[.Z]" (exact), "==X.Y[.Z]".
+    kv = d.get("kernel_version")
+    if isinstance(kv, str) and not _kernel_satisfies(kv):
+        errs.append("kernel_version %r not satisfied by this kernel %s (profile needs a newer kernel)"
+                    % (kv, _kernel_version()))
 
     w = d.get("witnesses")
     if isinstance(w, dict):
