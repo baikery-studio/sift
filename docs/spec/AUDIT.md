@@ -65,20 +65,41 @@ and the W3 artifact hash, so a PASS resolves to a specific commit. When the publ
 repository squashes history, ship a committed provenance manifest mapping each confirmed
 packet → commit SHA + w3 hash so `feature_sha` stays resolvable from the shipped repo.
 
-## What a second party needs
+## The portable bundle: `sift export` -> `sift audit --bundle`
 
-`sift audit` is not satisfied by a bare `git clone`. To replay-verify a `confirmed`, the
-auditor needs three inputs together:
+The artifacts audit reads (`.harness/log.jsonl` + `.harness/reviews/<id>.*`) are gitignored, so
+they do not travel with a `git clone`. Rather than hand-assembling three piles of files out of
+band, ship ONE self-describing bundle:
 
-1. **The repo** at (or resolving to) the recorded `feature_sha` — the source the work was
-   reviewed against.
-2. **`.harness/log.jsonl`** — the hash-chained event log. Gitignored by default, so the
-   operator must ship it out of band, commit it deliberately, or hand it over with the repo.
-3. **`.harness/reviews/<id>.w2.json` / `.w3.json` / `.w4.json`** — the witness artifacts
-   whose hashes the confirmed event binds. Also gitignored by default; ship them alongside
-   the log.
+```
+sift export <id>  > work.bundle        # one portable tar, written to stdout
+sift audit --bundle work.bundle        # verify on a foreign machine, nothing else present
+```
 
-For a published or squashed repo, a committed provenance manifest (per *Provenance*) plus
-the shipped log and reviews is the practical hand-off package. Without the log and reviews
-there is nothing to verify — audit reports FAIL (no confirmed event / missing artifact),
-never a false PASS.
+`sift export <id>` writes a tar carrying exactly what an auditor needs: the contiguous
+hash-chain PREFIX up to the packet's terminal event (a prefix, so it still re-derives clean),
+the bound witness artifacts (`.w2/.w3/.w4.json` + the pinned `.packet`), and a `bundle.json`
+manifest (schema, packet_id, feature_sha, chain head). `sift audit --bundle <file>` extracts it
+to a temp dir and routes through the SAME three checks as the in-place audit (chain verify,
+`project_state` to a witness-bound terminal, artifact re-hash), so a stranger with one file
+catches a witnessless / self-minted / reject-quoting / content-tampered confirmed. A
+witness-bound `partially_confirmed` travels and verifies the same way (it is a gradeable
+terminal). The bundle is tamper-EVIDENT to in-content mutation: a flipped log-line byte fails
+the chain check, a swapped artifact byte fails the re-hash.
+
+### feature_sha cross-repo provenance
+
+`audit --bundle` resolves the bundle's `feature_sha` against the repo it runs in and SURFACES
+the result: PRESENT (the reviewed commit is in this repo) or NOT-FOUND (the bundle vouches for a
+commit this repo does not contain), or "no git in audit repo" when it cannot resolve. This is
+advisory, not a hard fail (a legitimate auditor may verify a bundle in a fresh clone), but it is
+never silent: without it a bundle from repo A would verify next to an unrelated repo B while the
+auditor believed it vouched for the code in front of them.
+
+## Honesty bound for the bundle
+
+The bundle is transport, not cryptography. It is exactly as forgeable as the chain it carries
+(a determined author who rewrites the whole chain still verifies); a future signing decision is
+separate. What the bundle makes real is the lazy / partial / premature case crossing a trust
+boundary. Without the log and reviews there is nothing to verify: audit reports FAIL (no
+terminal event / missing artifact), never a false PASS.
