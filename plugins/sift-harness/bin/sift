@@ -12,6 +12,7 @@ cmd="${1:-}"; [ "$#" -gt 0 ] && shift
 _sift_usage() {
   echo "usage: sift <verb> [args]   (the build-rigor harness; 'done' is witness-proven)"
   echo "  plan|execute|review <id>   drive a packet plan -> execute -> review -> confirmed"
+  echo "    review <id> --sign       opt-in: sign the verdict with a local ssh key (zero network)"
   echo "  state <id>                 the packet's replayed state (confirmed/.../corrupt/unknown)"
   echo "  status | next <wave>       operator board / next actionable packet in a wave"
   echo "  drive <wave>               autonomous loop a wave to ALL-CONFIRMED (if available)"

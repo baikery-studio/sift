@@ -160,7 +160,23 @@ sift_execute() {
 }
 
 sift_review() {
-  id="$1"; pf="$SIFT_PACKETS/$id.md"; pd="$(_prof_dir "$id")"
+  # SOTA-3: parse the OPT-IN --sign flag (positional id stays first). Signing is also enabled by
+  # SIFT_SIGN=1 or the profile witnesses.w3.sign flag; --sign on the CLI is the explicit form.
+  id=""; local _sign=0 _a
+  for _a in "$@"; do
+    case "$_a" in
+      --sign) _sign=1 ;;
+      -*)     ;;                       # ignore other flags (forward-compat)
+      *)      [ -z "$id" ] && id="$_a" ;;
+    esac
+  done
+  pf="$SIFT_PACKETS/$id.md"; pd="$(_prof_dir "$id")"
+  [ "${SIFT_SIGN:-}" = "1" ] && _sign=1
+  if [ "$_sign" -ne 1 ] && [ -f "$pd/profile.json" ]; then
+    python3 -c 'import json,sys
+try: sys.exit(0 if json.load(open(sys.argv[1])).get("witnesses",{}).get("w3",{}).get("sign") is True else 1)
+except Exception: sys.exit(1)' "$pd/profile.json" && _sign=1
+  fi
   local _rs; _rs="$(project_state "$id")"
   if [ "$_rs" != acceptance_met ]; then
     local _h
@@ -175,6 +191,21 @@ sift_review() {
   fi
   log_append lane.transition acceptance_met reviewing "$id" >/dev/null
   mkdir -p "$SIFT_REVIEWS"
+  # SOTA-3 signing: resolve the local signing key and FAIL CLOSED now if --sign was requested
+  # but signing is unavailable (no key / no ssh-keygen) — never silently emit an unsigned
+  # confirmed when signing was required. The signer's PUBLIC key is recorded in the verdict
+  # event below so the chain hash covers signer identity; keyless stays the default.
+  local _signkey="" _signer_pub=""
+  if [ "$_sign" -eq 1 ]; then
+    . "$_PIPE_DIR/sign.sh"
+    _signkey="${SIFT_SIGN_KEY:-$HOME/.ssh/id_ed25519}"
+    if ! sift_sign_available "$_signkey"; then
+      log_append lane.transition reviewing review_failed "$id" >/dev/null
+      echo "[sift] review --sign: no usable signing key at '$_signkey' (need <key> + <key>.pub + ssh-keygen) — failing closed, not emitting an unsigned confirmed" >&2; return 1
+    fi
+    _signer_pub="$(sift_sign_pubkey "$_signkey")"
+    [ -n "$_signer_pub" ] || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] review --sign: could not read signer public key from '$_signkey.pub'" >&2; return 1; }
+  fi
   # W2 reproduce: independent, from clean (committed) state, writing a REAL artifact.
   # A clean tree means the reproduce reflects feature_sha, not uncommitted work; a dirty
   # tree fails closed with an actionable message.
@@ -307,8 +338,20 @@ EOF
   # vj/we carry the default w2/w3/w4 hashes PLUS any extra declared-witness hashes (_extra_we).
   # When _extra_we is "{}" (default profile) the result is byte-identical to the w2/w3/w4-only
   # form; the event_hash is canon(sorted-keys) so field order never matters.
-  vj="$(python3 -c 'import json,sys; d=json.loads(sys.argv[6]); d.update({"verdict":"pass","feature_sha":sys.argv[1],"w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4],"w3_mode":sys.argv[5]}); print(json.dumps(d))' "$fsha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}" "$_extra_we")"
+  # SOTA-3: when signing, record the signer PUBLIC key inside the verdict event so its
+  # event_hash covers signer identity (additive — never in REQUIRED_WE). Empty when keyless, so
+  # the unsigned default is byte-identical.
+  vj="$(python3 -c 'import json,sys
+d=json.loads(sys.argv[6]); d.update({"verdict":"pass","feature_sha":sys.argv[1],"w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4],"w3_mode":sys.argv[5]})
+if sys.argv[7]: d["signer_pubkey"]=sys.argv[7]
+print(json.dumps(d))' "$fsha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}" "$_extra_we" "$_signer_pub")"
   veh="$(log_append review.verdict reviewing reviewing "$id" "$vj")"
+  # sign the canonical verdict bytes (the chained event_hash). Fail closed: a signing failure
+  # after --sign must not yield a confirmed that claims a signer but carries no valid signature.
+  if [ "$_sign" -eq 1 ]; then
+    sift_sign "$_signkey" "$veh" "$SIFT_REVIEWS/$id.sig" \
+      || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] review --sign: signing the verdict event_hash failed" >&2; return 1; }
+  fi
   # w3_mode is ADDITIVE / OPTIONAL evidence (W3-SEM-1): it lets a second party prove which
   # review regime ran (host R1-R13 vs keyless structural floor). It is NOT in _state.py
   # REQUIRED_WE — every pre-existing confirmed lacks it and must still replay clean, so its
