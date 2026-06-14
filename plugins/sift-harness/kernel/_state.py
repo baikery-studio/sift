@@ -47,18 +47,86 @@ REQUIRED_WE = ["verdict_event", "feature_sha", "extended_hash", "w1_ok", "w2_has
 
 
 def _verify_chain(lines):
-    prev_hash, prev_seq = GENESIS, 0
+    """Back-compat shim: verify a list of RAW lines. Parses then delegates to the parsed check.
+    Returns (ok, idx): idx is the failing line on a parse error, else the line count (callers
+    that need the precise break offset use verify-log; _audit.py discards idx)."""
+    events = []
     for i, ln in enumerate(lines, 1):
         try:
-            ev = json.loads(ln)
+            events.append(json.loads(ln))
         except Exception:
             return (False, i)
+    return (_verify_chain_parsed(events), len(lines))
+
+
+def _verify_chain_parsed(events):
+    """The hash-chain check over ALREADY-PARSED events (single-pass: callers parse each line
+    once and reuse the list for both verify and replay). Returns True iff the whole chain
+    re-derives clean."""
+    prev_hash, prev_seq = GENESIS, 0
+    for ev in events:
         content = {k: v for k, v in ev.items() if k != "event_hash"}
         h = hashlib.sha256(_canon(content).encode("utf-8")).hexdigest()
         if h != ev.get("event_hash") or ev.get("prev_hash") != prev_hash or ev.get("seq") != prev_seq + 1:
-            return (False, i)
+            return False
         prev_hash, prev_seq = ev["event_hash"], ev["seq"]
-    return (True, len(lines))
+    return True
+
+
+# SCALE-MEMO: per-INVOCATION verified-event cache. project_state runs PER PACKET in loops
+# (doctor/status/wave/drive); re-verifying the whole chain on every call is O(P×N). This caches
+# the parsed+verified event list keyed by (realpath, mtime_ns, size) so a single process verifies
+# ONCE and reuses the list across every projection -> O(N+P). It lives in-PROCESS only: a fresh
+# `sift` invocation starts empty, so there is NO persisted, operator-writable checkpoint a tampered
+# log could ride (the deliberate reason HD2-1's file checkpoint was dropped). Any mtime/size change
+# re-verifies. The cache holds only the VERIFIED-CLEAN list; per-packet witness re-hashing still
+# runs every projection, so a content-tampered artifact is still caught — byte-identical semantics.
+_VCACHE = {}
+
+
+def _trace_verify():
+    tf = os.environ.get("SIFT_VERIFY_TRACE")
+    if tf:
+        try:
+            with open(tf, "a") as f:
+                f.write("verify\n")
+        except Exception:
+            pass
+
+
+def _load_verified(log_path):
+    """Return (ok, events) for the log, parsing each line ONCE and verifying the chain ONCE per
+    process invocation (memoized). A FULL verify (cache miss) emits a SIFT_VERIFY_TRACE line."""
+    # Cache key from a single O(1) stat (NOT a content hash — hashing to form the key would
+    # re-read the log on every call and reintroduce O(P×N), defeating the memo). Include ino +
+    # ctime_ns + mtime_ns + size: an append bumps size/mtime; an in-place rewrite bumps ctime
+    # (which os.utime CANNOT forge, unlike mtime); a file recreate changes ino. So a
+    # length-preserving in-place tamper with a restored mtime still invalidates the cache and
+    # re-verifies. The residual (restore the system clock AND recreate with the exact inode,
+    # in-process) is far inside the documented single-operator full-chain-rewrite ceiling.
+    try:
+        stt = os.stat(log_path)
+        key = (os.path.realpath(log_path), stt.st_ino, stt.st_ctime_ns, stt.st_mtime_ns, stt.st_size)
+    except OSError:
+        key = None
+    if key is not None and key in _VCACHE:
+        return _VCACHE[key]
+    events, ok = [], True
+    for ln in open(log_path):
+        if not ln.strip():
+            continue
+        try:
+            events.append(json.loads(ln))
+        except Exception:
+            ok = False
+            break
+    if ok:
+        ok = _verify_chain_parsed(events)
+    _trace_verify()                      # a full verify happened (cache miss)
+    result = (ok, events)
+    if key is not None:
+        _VCACHE[key] = result
+    return result
 
 
 def _valid_witness(we, packet_id, reviews_dir, by_hash, confirmed_seq):
@@ -141,19 +209,17 @@ def project_state(log_path, packet_id, reviews_dir):
         # no log at all: a real (but unplanned) packet has a packet file -> submitted; a
         # nonexistent id (typo) has neither file nor events -> unknown, not a misleading submitted.
         return "submitted" if os.path.exists(_packet_path(packet_id, reviews_dir)) else "unknown"
-    lines = [ln.rstrip("\n") for ln in open(log_path) if ln.strip()]
-    # Always verify the full hash-chain (HD2-1: the whole-file-SHA checkpoint was dropped —
-    # measured ~1.4x, not load-bearing, and a keyless file checkpoint is forgeable by any
-    # operator who can write .harness/, so a lazy tamper + matching file_sha could skip
-    # verification. No accelerator means no file an operator can write lets a tampered log
-    # pass as clean; the only way through is a fully-valid rewritten chain (the documented
-    # ceiling).
-    ok, _ = _verify_chain(lines)
+    # Verify the full hash-chain — ONCE per process invocation, then reuse the verified event
+    # list for this and every other per-packet projection (SCALE-MEMO). There is still NO
+    # persisted accelerator: the memo is in-process only, rebuilt every fresh invocation, so no
+    # file an operator can write lets a tampered log pass as clean; the only way through is a
+    # fully-valid rewritten chain (the documented ceiling). The per-packet witness re-hash below
+    # still runs every projection, so a content-tampered artifact is still caught.
+    ok, events = _load_verified(log_path)
     if not ok:
         return "corrupt"
     transitions, by_hash = [], {}
-    for ln in lines:
-        ev = json.loads(ln)
+    for ev in events:
         if ev.get("packet_id") != packet_id:
             continue
         by_hash[ev.get("event_hash")] = ev
@@ -201,6 +267,14 @@ def project_state(log_path, packet_id, reviews_dir):
 
 
 if __name__ == "__main__":
+    # batch: _state.py --batch <log> <reviews> <id...>  — project MANY packets in ONE process,
+    # so the chain is verified ONCE (the memo) and reused. Prints "<id>\t<state>" per id. Used by
+    # doctor/status/wave loops to drop the O(P×N) re-verify factor to O(N+P).
+    if len(sys.argv) >= 4 and sys.argv[1] == "--batch":
+        log, reviews = sys.argv[2], sys.argv[3]
+        for pid in sys.argv[4:]:
+            print("%s\t%s" % (pid, project_state(log, pid, reviews)))
+        sys.exit(0)
     if len(sys.argv) < 4:
-        sys.stderr.write("usage: _state.py <log_path> <packet_id> <reviews_dir>\n"); sys.exit(2)
+        sys.stderr.write("usage: _state.py <log_path> <packet_id> <reviews_dir> | --batch <log> <reviews> <id...>\n"); sys.exit(2)
     print(project_state(sys.argv[1], sys.argv[2], sys.argv[3]))
