@@ -10,6 +10,13 @@ project_state() {
   python3 "$_STATESH_DIR/_state.py" "$SIFT_LOG" "$1" "$SIFT_REVIEWS"
 }
 
+# project_states_batch PACKET_ID...  → prints "<id>\t<state>" per id, verifying the chain ONCE
+# (the in-process memo) instead of once per id. Loops like doctor/status/wave use this to avoid
+# the O(P×N) re-verify cliff (SCALE-MEMO).
+project_states_batch() {
+  python3 "$_STATESH_DIR/_state.py" --batch "$SIFT_LOG" "$SIFT_REVIEWS" "$@"
+}
+
 # sift_abort <id> — in-band recovery for a packet wedged after a crash (e.g. stuck in
 # reviewing). Emits a LEGAL chained transition to a re-runnable state and clears focus,
 # so recovery never needs hand-editing the log. reviewing->review_failed, executing->failed.
