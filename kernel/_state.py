@@ -22,7 +22,9 @@ chain will verify — it is THEIR own log. What this defeats is the lazy / parti
 / accidental premature-done: a witnessless confirmed, a self-minted side-file
 with no verdict event, or a confirmed quoting a verdict event that says "reject".
 """
-import sys, os, json, hashlib, unicodedata
+import sys, os, json, hashlib
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _canon import canon as _canon   # SINGLE source of canonicalization (shared with _log.py)
 
 GENESIS = "0" * 64
 
@@ -42,12 +44,6 @@ TRANSITIONS = {
 # (retirement from any reached state) and emitted by `sift supersede`. `partially_confirmed`
 # is emitted by the soft-floor cap (AR-3).
 REQUIRED_WE = ["verdict_event", "feature_sha", "extended_hash", "w1_ok", "w2_hash", "w3_hash", "w4_hash"]
-
-
-def _canon(obj):
-    # MUST stay byte-identical to _log.py _canon (NFC + ensure_ascii=False), or
-    # verify re-derives a different hash than append wrote.
-    return unicodedata.normalize("NFC", json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
 
 
 def _verify_chain(lines):

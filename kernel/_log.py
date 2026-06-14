@@ -13,16 +13,12 @@ Trust model (spine):
 
 Stdlib only (no PyYAML / no deps) so it runs on any python3 — part of H8.
 """
-import sys, os, json, hashlib, fcntl, unicodedata
+import sys, os, json, hashlib, fcntl
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _canon import canon as _canon   # SINGLE source of canonicalization (shared with _state.py)
 
 GENESIS = "0" * 64
 LOG_SCHEMA_VERSION = "2"   # "2" = the hash-chained {seq,prev_hash,event_hash} schema
-
-
-def _canon(obj):
-    # NFC-normalize so equal-looking unicode (NFD vs NFC) hashes identically —
-    # defense-in-depth for the chain's content hash.
-    return unicodedata.normalize("NFC", json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False))
 
 
 def _event_hash(content):
