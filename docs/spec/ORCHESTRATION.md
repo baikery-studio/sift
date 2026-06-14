@@ -44,6 +44,20 @@ weak to gate on, so replan is a non-blocking input, never a gate. `packet.emit` 
 inert to state projection, and the scaffold/append/emit path rewrites no prior event, so every
 existing confirmed still replays clean.
 
+## Economic stop (brakes)
+
+An autonomous drive loop that re-dispatches on every failure would retry a wedged packet forever
+(`executing->failed->executing->failed...` is a legal cycle). `sift_drive_governor <packet>
+<max_retries>` is the brake: it counts the packet's FAILED transitions (`executing->failed` +
+`reviewing->review_failed`) from the HASH-CHAINED, verified log (never a forgeable side-counter)
+and, at or above the packet's declared `max_retries`, emits ONE chained
+`orch.decision{action:halt,reason:retry_ceiling}` and stops driving it. Below the ceiling it emits
+nothing and continues. The drive loop also keeps an in-memory no-progress backstop for a packet
+that never even transitions. Guards: a halt is the ABSENCE of dispatch plus a logged, INERT event,
+so it can never fabricate a terminal; the governor REFUSES to halt or supersede an already
+`confirmed`/`superseded` packet (a brake may not erase a witness-bound completion); and it will not
+derive a halt from a chain that does not verify. Zero egress: pure log arithmetic.
+
 ## Reading the trace
 
 `sift trace <wave-id>` reads the VERIFIED log and prints, in chain order, the orchestrator
