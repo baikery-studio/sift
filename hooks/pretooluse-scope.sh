@@ -23,37 +23,15 @@ payload="$(cat 2>/dev/null || true)"
 # (tee/cp/mv/install/truncate/touch/rsync/dd, sed -i) — and check EACH against scope.
 # fd-dups (2>&1) and /dev/null are not file writes. A garbled payload yields
 # __PARSE_ERROR__ so the guard fails CLOSED while a focus is active.
-parsed="$(printf '%s' "$payload" | python3 -c 'import json,sys,re
-# A Bash command whose write targets a regex CANNOT statically enumerate is OPAQUE:
-# we emit __OPAQUE_BASH__ and let the guard fail CLOSED under an active focus (an
-# out-of-scope sentinel never matches scope.paths). This defeats the fail-open bypass
-# (dd of=, interpreter -c/-e, eval, $(...), xargs, find -exec, ln, redirect-to-var).
-def bash_opaque(c):
-    pats=[r"\$\(", r"`", r"<\(", r">\(", r"<<",
-          r"\beval\b", r"\b(?:ba)?sh\s+-c\b",
-          r"\b(?:python3?|perl|ruby|node)\b[^|;&]*-[A-Za-z]*[ce]\b",
-          r"\bawk\b", r"\bxargs\b", r"\bfind\b[^|;&]*-exec\b",
-          r"\bdd\b", r"\bln\b", r">\s*\$"]
-    return any(re.search(p, c) for p in pats)
-def bash_targets(c):
-    t=[]
-    # `>>?\|?` matches >, >>, and the clobber forms >| / >>| (and fd-prefixed 1>| etc.).
-    for m in re.finditer(r"(\d*)>>?\|?\s*(&?)([^\s;|&<>]+)", c):
-        fd,amp,tgt=m.groups()
-        if amp or tgt.isdigit(): continue
-        if tgt in ("/dev/null","/dev/stderr","/dev/stdout"): continue
-        t.append(tgt)
-    for m in re.finditer(r"(?:^|[;|&])\s*(?:tee|cp|mv|install|truncate|touch|rsync)\b([^;|&]*)", c):
-        for tok in m.group(1).split():
-            if tok.startswith("-") or "=" in tok: continue
-            t.append(tok)
-    m=re.search(r"\bsed\b[^;|]*\s-i\S*\s+(?:-e\s+\S+\s+)*([^\s;|&]+)", c)
-    if m: t.append(m.group(1))
-    return t
-def has_redirect(c):
-    # any output-redirection operator present (>, >>, >|, N>, &>) — used for the
-    # fail-closed backstop: a redirect present but no target resolved is OPAQUE.
-    return re.search(r"(?<![0-9<])>|&>", c) is not None
+# Bash write targets come from the SHARED module (hooks/_bash_write_targets.py), the single
+# source of truth both this enforcing guard and the advisory posttool detector use — so the
+# command set (incl. rm/mkdir/rmdir/chmod/chown/ln/tar/unzip + git checkout/restore/clean)
+# can never drift between them. write_targets() returns the path operands, ["__OPAQUE_BASH__"]
+# for a write whose targets can't be enumerated (guard fails CLOSED under focus), or [] for
+# read-only. __PARSE_ERROR__ on a garbled payload (fails closed too).
+parsed="$(printf '%s' "$payload" | HOOK_DIR="$HOOK_DIR" python3 -c 'import json,sys,os
+sys.path.insert(0, os.environ.get("HOOK_DIR",""))
+from _bash_write_targets import write_targets
 try:
     d=json.loads(sys.stdin.read())
     if not isinstance(d,dict): raise ValueError
@@ -63,15 +41,7 @@ try:
     if any(c in tn for c in "\n\r"): raise ValueError
     paths=[]
     if tn=="Bash":
-        cmd=str(ti.get("command") or "")
-        if bash_opaque(cmd):
-            paths=["__OPAQUE_BASH__"]
-        else:
-            paths=bash_targets(cmd)
-            # fail-closed backstop: a redirect operator is present but resolved to no
-            # target (exotic/fd-juggled redirect) — treat as opaque, do not allow.
-            if not paths and has_redirect(cmd):
-                paths=["__OPAQUE_BASH__"]
+        paths=write_targets(str(ti.get("command") or ""))
     else:
         fp=str(ti.get("file_path") or ti.get("path") or "")
         if fp: paths=[fp]

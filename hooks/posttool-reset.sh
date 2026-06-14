@@ -20,27 +20,9 @@ payload="$(cat 2>/dev/null || true)"
 # Emits two tab-separated tokens: "<kind>\t<path>" where kind ∈ edit|bashwrite|other and
 # path is the file_path for edit tools (or "_" for bash). Defensive parse → __PARSE_ERROR__.
 read -r kind path <<EOF
-$(printf '%s' "$payload" | python3 -c 'import json,sys,re
-def bash_writes(c):
-    # redirection to a real file (incl. >& file). Skip /dev/null|stderr|stdout and pure
-    # fd-dups (>&1, 2>&1, >&2). A >& with a non-numeric target IS a file write.
-    for m in re.finditer(r"(\d*)(>>?)(&?)\s*([^\s;|&<>]+)", c):
-        fd, op, amp, tgt = m.groups()
-        if tgt in ("/dev/null","/dev/stderr","/dev/stdout"): continue
-        if amp and tgt.isdigit(): continue                 # >&1 / 2>&1 fd-dup, not a file
-        if tgt.startswith("&"): continue
-        return True
-    # write-capable commands, anchored at a command position (start / after ; | & && ||)
-    # so package managers (npm install / pip install) and names like dd-trace do NOT
-    # false-positive (no apostrophes in this block: it is single-quoted python -c).
-    if re.search(r"(?:^|[;|&]|&&|\|\|)\s*(tee|cp|mv|dd|install|truncate|patch|rsync|touch|"
-                 r"rm|mkdir|rmdir|chmod|chown|ln|tar|unzip|gunzip|gzip)\b", c): return True
-    if re.search(r"\b(curl|wget)\b[^|;]*\s-[oO]\b", c): return True          # download-to-file only
-    if re.search(r"\bsed\b[^|;]*\s-i", c): return True                       # sed -i (in-place)
-    if re.search(r"\b(perl|ruby)\b[^|;]*\s-[a-z]*i", c): return True         # perl/ruby -i
-    if re.search(r"\b(python3?|node|ruby|perl)\b[^|;]*-e\b", c): return True # -e inline script (may write)
-    if re.search(r"\bpython3?\b[^|;]*open\([^)]*,\s*[\"'"'"'][wax]", c): return True
-    return False
+$(printf '%s' "$payload" | HOOK_DIR="$HOOK_DIR" python3 -c 'import json,sys,os
+sys.path.insert(0, os.environ.get("HOOK_DIR",""))
+from _bash_write_targets import is_write as bash_writes   # SHARED with the enforcing guard
 try:
     d=json.loads(sys.stdin.read())
     if not isinstance(d, dict): raise ValueError
