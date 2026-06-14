@@ -250,6 +250,43 @@ except Exception: print("unknown")' 2>/dev/null || echo unknown)"
   printf '%s' "$w4out" | _json_true ok \
     || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] W4 failed: $(printf '%s' "$w4out" | _json_reason)" >&2; return 1; }
   printf '%s\n' "$w4out" > "$w4art"
+  # WITNESS-PLATFORM: run any ADDITIONAL review witnesses the profile declares beyond the kernel
+  # defaults (w2 reproduce, w3 review, w4 wiring), so a profile adds a coverage/security/perf/
+  # dependency witness WITHOUT kernel surgery. Each declared {impl, artifact}: invoke the impl,
+  # fail closed on a non-ok verdict, then hash the declared artifact and bind it as <id>_hash.
+  # The default software profile declares only w3/w4, so this loop is EMPTY and the default path
+  # is byte-identical (w2/w3/w4 above are untouched). _state.py binds whatever w*_hash keys are
+  # present, so an extra witness here cannot be left unbound.
+  local _extra_we="{}" _wid _wimpl _wsuf
+  while IFS="	" read -r _wid _wimpl _wsuf; do
+    [ -n "$_wid" ] || continue
+    # The witness id becomes the binding key <id>_hash that _state.py verifies via ^w\w+_hash$.
+    # Reject any id the replay would NOT bind (a `.`/`/`/space in the id), so the producer and
+    # the validator agree: a witness this runs is a witness replay verifies (no fail-open gap).
+    printf '%s' "$_wid" | grep -qE '^w[A-Za-z0-9_]+$' \
+      || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] invalid declared witness id '$_wid' (must match w[A-Za-z0-9_]+) — review_failed" >&2; return 1; }
+    if [ -z "$_wimpl" ] || [ ! -f "$pd/$_wimpl" ]; then
+      log_append lane.transition reviewing review_failed "$id" >/dev/null
+      echo "[sift] declared witness '$_wid' has no impl ($_wimpl) — review_failed" >&2; return 1
+    fi
+    local _wout; _wout="$(bash "$pd/$_wimpl" "$pf" "$id" 2>/dev/null || true)"
+    printf '%s' "$_wout" | _json_true ok \
+      || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] declared witness '$_wid' failed: $(printf '%s' "$_wout" | _json_reason)" >&2; return 1; }
+    local _wsfx="${_wsuf:-.$_wid.json}" _wart _whash
+    _wart="$SIFT_REVIEWS/$id$_wsfx"
+    [ -f "$_wart" ] \
+      || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] declared witness '$_wid' wrote no artifact ($_wsfx) — review_failed" >&2; return 1; }
+    _whash="$(_sift_sha < "$_wart")"
+    _extra_we="$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d[sys.argv[2]+"_hash"]=sys.argv[3]; print(json.dumps(d))' "$_extra_we" "$_wid" "$_whash")"
+  done <<EOF
+$(python3 -c 'import json,sys
+try: w=json.load(open(sys.argv[1])).get("witnesses",{})
+except Exception: w={}
+for wid in sorted(w):
+    if wid in ("w2","w3","w4"): continue
+    e=w[wid] if isinstance(w[wid],dict) else {}
+    print("%s\t%s\t%s" % (wid, e.get("impl",""), e.get("artifact","")))' "$pd/profile.json" 2>/dev/null || true)
+EOF
   # Emit a CHAINED review.verdict event recording the real W3 verdict (=pass,
   # since we passed the fail-closed W3 gate above), then bind the terminal
   # confirmed event to that event by its event_hash. Authenticity now rides on
@@ -267,14 +304,17 @@ except Exception: print("unknown")' 2>/dev/null || echo unknown)"
   # the verdict event records ALL THREE real witness-artifact hashes; the terminal
   # confirmed event binds to them (and to the re-derivable extended_hash). _state.py
   # rejects any of these that does not match its on-disk artifact at replay.
-  vj="$(python3 -c 'import json,sys; print(json.dumps({"verdict":"pass","feature_sha":sys.argv[1],"w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4],"w3_mode":sys.argv[5]}))' "$fsha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}")"
+  # vj/we carry the default w2/w3/w4 hashes PLUS any extra declared-witness hashes (_extra_we).
+  # When _extra_we is "{}" (default profile) the result is byte-identical to the w2/w3/w4-only
+  # form; the event_hash is canon(sorted-keys) so field order never matters.
+  vj="$(python3 -c 'import json,sys; d=json.loads(sys.argv[6]); d.update({"verdict":"pass","feature_sha":sys.argv[1],"w1_ok":True,"w2_hash":sys.argv[2],"w3_hash":sys.argv[3],"w4_hash":sys.argv[4],"w3_mode":sys.argv[5]}); print(json.dumps(d))' "$fsha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}" "$_extra_we")"
   veh="$(log_append review.verdict reviewing reviewing "$id" "$vj")"
   # w3_mode is ADDITIVE / OPTIONAL evidence (W3-SEM-1): it lets a second party prove which
   # review regime ran (host R1-R13 vs keyless structural floor). It is NOT in _state.py
   # REQUIRED_WE — every pre-existing confirmed lacks it and must still replay clean, so its
   # absence can never corrupt a confirmed. _state.py does not compare it, so adding it here is
   # safe; _audit.py surfaces it.
-  we="$(python3 -c 'import json,sys; print(json.dumps({"verdict_event":sys.argv[1],"feature_sha":sys.argv[2],"extended_hash":sys.argv[3],"w1_ok":True,"w2_hash":sys.argv[4],"w3_hash":sys.argv[5],"w4_hash":sys.argv[6],"w3_mode":sys.argv[7]}))' "$veh" "$fsha" "$esha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}")"
+  we="$(python3 -c 'import json,sys; d=json.loads(sys.argv[8]); d.update({"verdict_event":sys.argv[1],"feature_sha":sys.argv[2],"extended_hash":sys.argv[3],"w1_ok":True,"w2_hash":sys.argv[4],"w3_hash":sys.argv[5],"w4_hash":sys.argv[6],"w3_mode":sys.argv[7]}); print(json.dumps(d))' "$veh" "$fsha" "$esha" "$w2h" "$w3h" "$w4h" "${w3mode:-unknown}" "$_extra_we")"
   # Soft-floor cap (operator-acknowledged): if the packet declares an accepted soft_floor,
   # validate it against the profile's soft_floors[].category allowlist. A KNOWN category
   # caps the terminal to partially_confirmed (still witness-bound). An UNKNOWN category

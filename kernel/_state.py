@@ -22,7 +22,7 @@ chain will verify — it is THEIR own log. What this defeats is the lazy / parti
 / accidental premature-done: a witnessless confirmed, a self-minted side-file
 with no verdict event, or a confirmed quoting a verdict event that says "reject".
 """
-import sys, os, json, hashlib
+import sys, os, json, hashlib, re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _canon import canon as _canon   # SINGLE source of canonicalization (shared with _log.py)
 
@@ -95,9 +95,16 @@ def _valid_witness(we, packet_id, reviews_dir, by_hash, confirmed_seq):
     # no field is presence-only. W2 reproduce, W3 review, W4 wiring each wrote a real
     # artifact whose sha256 must equal the hash carried in the confirmed event and the
     # chained verdict event. A decorative literal (w2_hash="reproduced") no longer passes.
-    # w2/w3/w4 each bind to their reviews .json AND the verdict event — no field is
-    # presence-only. A decorative literal (w2_hash="reproduced") no longer passes.
-    for wk, suffix in (("w2_hash", ".w2.json"), ("w3_hash", ".w3.json"), ("w4_hash", ".w4.json")):
+    # WITNESS-PLATFORM: bind EVERY witness-hash key data-drivenly, not a literal w2/w3/w4 list,
+    # so a profile that declares an extra witness (w5...) has it bound too. A witness-hash key is
+    # `w<id>_hash`; its artifact is reviews/<packet>.<id>.json (suffix derived from the key, the
+    # same convention pipeline.sh writes). The mandatory defaults w2/w3/w4 are still enforced by
+    # REQUIRED_WE presence above, so the software default set is byte-identical and an existing
+    # confirmed (carrying exactly w2/w3/w4) binds exactly as before. Each hash must match BOTH
+    # the on-disk artifact AND the chained verdict event — no field is presence-only.
+    wkeys = sorted(k for k in we if re.match(r"^w\w+_hash$", k))
+    for wk in wkeys:
+        suffix = "." + wk[:-len("_hash")] + ".json"   # w2_hash -> .w2.json ; w5_hash -> .w5.json
         art = os.path.join(reviews_dir, packet_id + suffix)
         if not os.path.exists(art):
             return False
