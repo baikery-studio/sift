@@ -28,6 +28,9 @@ sift_doctor() {
   [ "$_weak" -gt 0 ] && echo "[doctor] $_weak weak-acceptance warning(s) (advisory)" >&2
 
   [ -f "$SIFT_LOG" ] || { echo "[doctor] no log at $SIFT_LOG — nothing to check"; return 0; }
+  # A witness-bound terminal is {confirmed, partially_confirmed} — both carry bound W2/W3/W4
+  # artifacts that must still re-verify, so doctor scans both (a partially_confirmed with a
+  # silently-deleted artifact is the same silent-degradation case as a confirmed one).
   local ever_confirmed id problems=0
   ever_confirmed="$(python3 -c 'import json,sys
 ids=set()
@@ -35,7 +38,7 @@ for l in open(sys.argv[1]):
     if not l.strip(): continue
     try: e=json.loads(l)
     except Exception: continue
-    if e.get("kind")=="lane.transition" and e.get("to")=="confirmed":
+    if e.get("kind")=="lane.transition" and e.get("to") in ("confirmed","partially_confirmed"):
         ids.add(e.get("packet_id"))
 print("\n".join(sorted(i for i in ids if i)))' "$SIFT_LOG")"
   for id in $ever_confirmed; do
@@ -58,8 +61,8 @@ for l in open(log):
         e = json.loads(l)
     except Exception:
         continue
-    if e.get("kind") == "lane.transition" and e.get("to") == "confirmed" and e.get("packet_id") == pid:
-        we = e.get("witness_evidence") or {}
+    if e.get("kind") == "lane.transition" and e.get("to") in ("confirmed","partially_confirmed") and e.get("packet_id") == pid:
+        we = e.get("witness_evidence") or {}   # last terminal wins (matches the replay final state)
 probs = []
 if we is not None:
     for wk, suf in (("w2_hash", ".w2.json"), ("w3_hash", ".w3.json"), ("w4_hash", ".w4.json")):
@@ -77,7 +80,7 @@ sys.exit(1 if probs else 0)
 ' "$SIFT_LOG" "$SIFT_REVIEWS" "$id" 2>/dev/null)" || {
       while IFS= read -r _line; do
         [ -n "$_line" ] || continue
-        echo "[doctor] ${_line%% *} witness artifact for confirmed packet '$id' (${_line#* }) — re-verification failed (bound hash mismatch)" >&2
+        echo "[doctor] ${_line%% *} witness artifact for witness-bound terminal '$id' (${_line#* }): re-verification failed (bound hash mismatch)" >&2
         problems=$((problems+1))
       done <<EOF
 $_res

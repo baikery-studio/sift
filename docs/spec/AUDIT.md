@@ -17,17 +17,36 @@ independent checks and prints a structured verdict:
 1. **Chain** — `verify-log` re-derives every `event_hash` and the `prev_hash`/`seq`
    linkage. Any edit, insert, reorder, or delete fails here (exit ≠ 0). A
    schema-too-old log is reported distinctly (run `sift migrate-log`).
-2. **Replay** — `project_state` replays the packet's transitions and returns
-   `confirmed` only if the terminal event is bound to a prior, in-chain
+2. **Replay** — `project_state` replays the packet's transitions and returns a
+   witness-bound terminal only if the terminal event is bound to a prior, in-chain
    `review.verdict` whose verdict is `pass`, with matching `feature_sha` and witness
-   hashes. A witnessless or forged `confirmed` replays as `corrupt` and fails here.
+   hashes. A witnessless or forged terminal replays as `corrupt` and fails here.
 3. **Artifacts** — each bound `w2_hash` / `w3_hash` / `w4_hash` is recomputed from the
    on-disk `.w2.json` / `.w3.json` / `.w4.json` and compared to the value in the
-   confirmed event. A missing artifact (MISSING) or a content-swapped one (TAMPERED)
+   terminal event. A missing artifact (MISSING) or a content-swapped one (TAMPERED)
    fails here.
 
-PASS prints the bound evidence (feature_sha, verdict_event, the three artifact
-hashes). FAIL prints the exact reason. Exit code mirrors the verdict.
+PASS prints the grade plus the bound evidence (feature_sha, verdict_event, the three
+artifact hashes). FAIL prints the exact reason. Exit code mirrors the verdict.
+
+### Gradeable terminals
+
+A **witness-bound terminal** is `confirmed` or `partially_confirmed`. `project_state` binds
+both with the same witness rigour. A soft-floored `partially_confirmed` still ran a real W3
+`pass` verdict; its grade comes from a W2/W4 cap, not a missing review. So both are auditable
+and both re-verify their bound artifacts, and the report names the grade. `sift doctor`
+likewise re-verifies the bound artifacts of every `partially_confirmed` packet, not only
+`confirmed` ones.
+
+### The verifier carries its own guarantee
+
+`kernel/_audit.py` is **self-sufficient**: invoked directly it runs the Chain and Replay
+checks itself (reusing `_state.py`'s exact `_verify_chain` and `project_state` logic) before
+the artifact report, then exits non-zero with the reason if either fails. It does not rely on
+a caller having gated first. `kernel/audit.sh` still runs its own Chain + Replay checks ahead
+of it (defence in depth), so a new entrypoint that reaches the verifier another way (for
+example `audit --bundle` or signature-verify) inherits the full guarantee rather than a false
+PASS on a tampered chain or a forged witness-binding.
 
 ## Honesty bound
 
