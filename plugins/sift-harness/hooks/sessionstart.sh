@@ -51,6 +51,12 @@ fi
 . "$HOOK_DIR/../kernel/config.sh" 2>/dev/null || true
 SIFT_STATE="${SIFT_STATE:-$(config_path state 2>/dev/null || echo "$SIFT_REPO_ROOT/.harness")}"
 rm -f "$SIFT_STATE/unpacketed-edit" 2>/dev/null || true
+# ENGAGE-COLD-1: same per-session reset for the cold-repo engage marker. Reached only once
+# .harness/ exists (the line-44 guard skips a truly-untouched cold repo — which has no marker
+# to reset anyway). The case that matters: a repo cold-edited in a PRIOR session armed the
+# marker AND created .harness/, so a fresh edit-free session here resets it and ends freely —
+# the gate is armed by an edit this session, not by lingering coldness.
+rm -f "$SIFT_STATE/cold-engage" 2>/dev/null || true
 
 # Standing primer (injected once per session as additionalContext): point the agent at the
 # harness as the law of this repo, so "use the harness" / any rigor-worthy task drives the

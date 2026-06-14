@@ -52,8 +52,9 @@ sift_focus() {
   mkdir -p "$SIFT_STATE"
   if [ "$#" -eq 0 ]; then cat "$SIFT_STATE/focus" 2>/dev/null || echo "(no focus)"; return 0; fi
   if [ "$1" = "--clear" ]; then
-    # also disarm the FORT-1 engage-gate marker — stop-block.sh names `sift focus --clear`
-    # as the throwaway escape, so it must actually release the turn (code-review HIGH).
-    rm -f "$SIFT_STATE/focus" "$SIFT_STATE/unpacketed-edit"; echo "[sift] focus cleared"; return 0; fi
+    # also disarm the FORT-1 + ENGAGE-COLD-1 engage-gate markers — stop-block.sh names
+    # `sift focus --clear` as the throwaway escape for both, so it must actually release the
+    # turn (code-review HIGH).
+    rm -f "$SIFT_STATE/focus" "$SIFT_STATE/unpacketed-edit" "$SIFT_STATE/cold-engage"; echo "[sift] focus cleared"; return 0; fi
   printf '%s\n' "$1" > "$SIFT_STATE/focus"; echo "[sift] focus: $1"
 }

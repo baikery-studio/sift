@@ -22,6 +22,21 @@ cat >/dev/null 2>&1 || true   # drain the Stop payload (unused)
 
 emit_block(){ python3 -c 'import json,sys;print(json.dumps({"decision":"block","reason":sys.argv[1]}))' "$1"; }
 
+# ENGAGE-COLD-1 cold-repo engage-gate: the agent edited code freehand in a repo with NO sift
+# harness set up (cold-engage armed by posttool-reset.sh). Block offering `sift setup` — this
+# is the one place herding was purely advisory (a fresh repo: no loop, no witness, no record),
+# so close it fail-closed. Key "set up" on config (what `sift setup` writes), NOT on .harness/:
+# arming the marker created .harness/state/, so a .harness check would wrongly read the cold
+# repo as already engaged and wave the turn through. Once config exists the marker is stale —
+# clear it and fall through to the normal warm gates below.
+if [ ! -f "$focus" ] && [ -f "$SIFT_STATE/cold-engage" ]; then
+  if [ ! -f "$SIFT_REPO_ROOT/sift-harness.config.json" ]; then
+    emit_block "you edited code in a repo with no sift harness set up — completion here is NOT witness-checked. Run \`sift setup\` to engage the harness (then \`sift init-claudemd\` for the standing rule) and drive the work through a packet, or \`sift focus --clear\` if this was throwaway, before ending the turn."
+    exit 0
+  fi
+  rm -f "$SIFT_STATE/cold-engage" 2>/dev/null || true   # config now exists → setup engaged, marker stale
+fi
+
 # FORT-1 engage-gate: no active packet, but the agent edited code freehand this session
 # (marker armed by posttool-reset.sh, reset per session by sessionstart.sh) → block so the
 # work gets driven through a packet instead of ending unproven.
