@@ -125,8 +125,14 @@ sift_plan() {
 
 sift_execute() {
   id="$1"; pf="$SIFT_PACKETS/$id.md"; pd="$(_prof_dir "$id")"
-  sift_lock_acquire "$id" || { echo "[sift] dispatch locked (WIP=1)" >&2; return 1; }
-  trap 'sift_lock_release' RETURN
+  # ORCH-1: when the drive loop already holds the dispatch lock for the WHOLE plan->execute->
+  # review iteration (SIFT_DRIVE_OWNS_LOCK=1), execute must NOT re-acquire it (it would deadlock
+  # against the loop's own lock) nor release it on RETURN (that would drop the loop's lock
+  # mid-iteration). Standalone `sift execute` still takes + releases the lock as before.
+  if [ "${SIFT_DRIVE_OWNS_LOCK:-}" != 1 ]; then
+    sift_lock_acquire "$id" || { echo "[sift] dispatch locked (WIP=1)" >&2; return 1; }
+    trap 'sift_lock_release' RETURN
+  fi
   rm -f "$SIFT_STATE/dirty.$id" 2>/dev/null || true   # HERD-3: re-execution clears the stale-acceptance marker
   cur="$(project_state "$id")"
   case "$cur" in

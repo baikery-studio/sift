@@ -44,6 +44,7 @@ case "$cmd" in
   wave-review) . "$SIFT_PLUGIN_ROOT/kernel/wave.sh"; sift_wave_review "$@" ;;
   coverage)    . "$SIFT_PLUGIN_ROOT/kernel/wave.sh"; sift_coverage "$@" ;;
   next)        . "$SIFT_PLUGIN_ROOT/kernel/next.sh"; sift_next "$@" ;;
+  drive)       . "$SIFT_PLUGIN_ROOT/kernel/drive.sh"; sift_drive "$@" ;;
   abort)       . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; sift_abort "$@" ;;
   supersede)   . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; sift_supersede "$@" ;;
   audit)       . "$SIFT_PLUGIN_ROOT/kernel/audit.sh"; sift_audit "$@" ;;
