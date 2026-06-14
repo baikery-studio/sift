@@ -76,6 +76,12 @@ if missing: print("incomplete-rubric"); sys.exit(1)
 print("pass")'
 }
 
+# Validate an arbitrary candidate verdict FILE with the exact host-verdict rules above, for
+# the sanctioned `sift w3-verdict` landing verb (W3-WRITE-VERB-1): echoes pass|<failreason>,
+# rc 0 only on a well-formed single-verdict rubric-complete pass. Same single-source validator
+# the agent's verdict must satisfy at review time — no second, looser parser.
+if [ "${1:-}" = "--validate-file" ]; then _w3_validate_host_verdict "${2:-}"; exit $?; fi
+
 witness_w3() {
   local pp="$1" id="$2"
   local reviews="${SIFT_REVIEWS:-.harness/reviews}"; mkdir -p "$reviews"

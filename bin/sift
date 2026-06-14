@@ -19,6 +19,7 @@ _sift_usage() {
   echo "  setup | init-claudemd      bootstrap a repo / make the loop a standing rule"
   echo "  verify-log | migrate-log   tamper-evidence check / re-chain an old-schema log"
   echo "  audit <id> | export <id>   second-party replay-verify / portable bundle (if available)"
+  echo "  w3-verdict <id> <staging>  land an agent-authored host W3 verdict past the scope fence"
   echo "  doctor | coverage <wave>   re-verify confirmeds / advisory wave gap-finding"
   echo "  abort <id> | supersede <id>   in-band recovery / retire a packet"
   echo "  selftest | sync | demo     suite / regenerate host bundles / 30-second proof"
@@ -44,6 +45,7 @@ case "$cmd" in
   abort)       . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; sift_abort "$@" ;;
   supersede)   . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; sift_supersede "$@" ;;
   audit)       . "$SIFT_PLUGIN_ROOT/kernel/audit.sh"; sift_audit "$@" ;;
+  w3-verdict)  . "$SIFT_PLUGIN_ROOT/kernel/w3_verdict.sh"; sift_w3_verdict "$@" ;;
   doctor)      . "$SIFT_PLUGIN_ROOT/kernel/doctor.sh"; sift_doctor "$@" ;;
   focus)       . "$SIFT_PLUGIN_ROOT/kernel/scope_guard.sh"; sift_focus "$@" ;;
   init-claudemd) . "$SIFT_PLUGIN_ROOT/kernel/scaffold.sh"; sift_init_claudemd "$@" ;;
@@ -52,6 +54,6 @@ case "$cmd" in
                  validate) shift; . "$SIFT_PLUGIN_ROOT/kernel/scaffold.sh"; sift_packet_validate "$@" ;;
                  *)        echo "[sift] usage: sift packet {new <id> [--profile P]|validate <id>}" >&2; exit 0 ;;
                esac ;;
-  "")          echo "[sift] usage: sift {version|plan|execute|review|state|status|verify-log|migrate-log|selftest|setup|wave-review|coverage|next|abort|supersede|audit|doctor|focus|init-claudemd|packet|sync} ..." >&2; exit 0 ;;
+  "")          echo "[sift] usage: sift {version|plan|execute|review|state|status|verify-log|migrate-log|selftest|setup|wave-review|coverage|next|abort|supersede|audit|w3-verdict|doctor|focus|init-claudemd|packet|sync} ..." >&2; exit 0 ;;
   *)           echo "[sift] unknown subcommand '$cmd' (fail-soft, no-op)" >&2; exit 0 ;;
 esac
