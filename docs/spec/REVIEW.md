@@ -5,6 +5,19 @@ W4 wiring). A `confirmed` is witness-bound only if W3 produced a `pass` verdict 
 `.harness/reviews/<id>.w3.json`, whose hash the confirmed event records. Two W3 modes exist,
 both **zero egress** (no network, no model API, no keys, no data leaves the machine).
 
+## Anti-tamper re-scan at review time
+
+The harness scans for test-tampering signatures (a skipped or early-returned test, a
+commented-out assertion, a CI `continue-on-error`) with `kernel/_signatures.py`. That scan runs
+at `sift execute` over the packet test plus its acceptance snapshot, and AGAIN at `sift review`
+over the packet's whole committed changed set (the pinned manifest `base_sha..HEAD`, falling
+back to `HEAD~1..HEAD`, then the working diff). The review-time pass exists because the gate
+that mints the witness-bound terminal must see every changed file: a weakened sibling test
+introduced after execute would otherwise reach a clean `confirmed`. A signature hit transitions
+`reviewing -> review_failed` with the same fail-closed semantics as the execute-time gate, so
+`sift state` is not `confirmed`. The scanner recognises shell (`.sh`) test files alongside the
+other languages, so this harness's own `.sh` acceptance tests are covered.
+
 ## Keyless default
 
 `profiles/software/witness_w3.sh` runs a deterministic structural check: it renders the rubric

@@ -22,7 +22,7 @@ _TEST_NAME = re.compile(
     # test-named files, plus conftest/fixtures/setup helpers that a test imports — a
     # skip decorator in conftest.py has the same effect as one in the test, so it must
     # be scanned too (else it's a gate bypass).
-    r'(^|/)(test_[^/]*|[^/]*_test|[^/]*\.test|[^/]*\.spec|conftest|setup_tests?)\.(py|js|ts|jsx|tsx|go|rb|java|cs)$'
+    r'(^|/)(test_[^/]*|[^/]*_test|[^/]*\.test|[^/]*\.spec|conftest|setup_tests?)\.(py|js|ts|jsx|tsx|go|rb|java|cs|sh)$'
     r'|(^|/)[^/]*Tests?\.cs$'
     r'|(^|/)(tests?|fixtures?|__tests__)/')
 _STR = re.compile(r'"[^"]*"|\'[^\']*\'')
