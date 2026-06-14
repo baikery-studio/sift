@@ -29,6 +29,17 @@ independent checks and prints a structured verdict:
 PASS prints the grade plus the bound evidence (feature_sha, verdict_event, the three
 artifact hashes). FAIL prints the exact reason. Exit code mirrors the verdict.
 
+### Reproduce grade (`w2_mode`)
+
+The verdict block also prints `w2_mode`, the W2 reproduce grade read from the bound
+`<id>.w2.json`: `clean_checkout` means the acceptance was reproduced from a real git worktree
+of `feature_sha` (a true clean checkout); `fresh_clone_unavailable` is the in-place soft floor
+taken when git or a worktree was unavailable. When the mode is not `clean_checkout`, or the
+`feature_sha` is unresolved (`nogit`), the verdict is labelled `PASS (degraded: <reason>)`
+rather than a bare PASS. This is advisory and still exit 0 (a soft-floored confirmed is real,
+just weaker), but it is never silent: a second party can see whether a PASS rests on a clean
+reproduce or a degraded one, instead of the two looking identical.
+
 ### Gradeable terminals
 
 A **witness-bound terminal** is `confirmed` or `partially_confirmed`. `project_state` binds

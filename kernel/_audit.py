@@ -98,8 +98,28 @@ _ve = by_hash.get(we.get("verdict_event")) if isinstance(we.get("verdict_event")
 _ve_mode = ((_ve or {}).get("witness_evidence") or {}).get("w3_mode") or "unknown"
 _mode_note = "" if _we_mode == _ve_mode else " (WARNING: verdict event records '%s' — mismatch)" % _ve_mode
 
-print("AUDIT PASS (%s): witness-bound %s, re-verified from repo + log" % (pid, grade))
+# w2_mode is the W2 reproduce GRADE (AUDIT-PROVENANCE): clean_checkout = reproduced from a real
+# worktree of feature_sha (W2-WORKTREE); fresh_clone_unavailable = the in-place soft floor. Read
+# it from the bound, already-re-hashed <id>.w2.json so a second party sees HOW the change was
+# reproduced. A degraded reproduce (mode != clean_checkout) OR an unresolvable feature_sha
+# ("nogit") labels the verdict PASS(degraded) — advisory, still exit 0 (a soft-floored confirmed
+# is real, just weaker), but never an indistinguishable clean PASS.
+_w2_mode = "unknown"
+try:
+    with open(os.path.join(reviews, pid + ".w2.json")) as _f:
+        _w2_mode = (json.load(_f) or {}).get("mode") or "unknown"
+except Exception:
+    _w2_mode = "unknown"
+_degraded = []
+if _w2_mode != "clean_checkout":
+    _degraded.append("w2 reproduce mode '%s' (not clean_checkout)" % _w2_mode)
+if (we.get("feature_sha") or "") in ("", "nogit"):
+    _degraded.append("feature_sha unresolved ('%s')" % (we.get("feature_sha") or ""))
+
+_verdict = "PASS" if not _degraded else "PASS (degraded: %s)" % "; ".join(_degraded)
+print("AUDIT %s (%s): witness-bound %s, re-verified from repo + log" % (_verdict, pid, grade))
 print("  grade         : %s" % grade)
+print("  w2_mode       : %s" % _w2_mode)
 print("  w3_mode       : %s%s" % (_we_mode, _mode_note))
 print("  feature_sha   : %s" % we.get("feature_sha"))
 print("  verdict_event : %s" % we.get("verdict_event"))
