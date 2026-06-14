@@ -48,6 +48,7 @@ case "$cmd" in
   supersede)   . "$SIFT_PLUGIN_ROOT/kernel/state.sh"; sift_supersede "$@" ;;
   audit)       . "$SIFT_PLUGIN_ROOT/kernel/audit.sh"; sift_audit "$@" ;;
   export)      . "$SIFT_PLUGIN_ROOT/kernel/export.sh"; sift_export "$@" ;;
+  trace)       . "$SIFT_PLUGIN_ROOT/kernel/orchestrate.sh"; sift_trace "$@" ;;
   w3-verdict)  . "$SIFT_PLUGIN_ROOT/kernel/w3_verdict.sh"; sift_w3_verdict "$@" ;;
   doctor)      . "$SIFT_PLUGIN_ROOT/kernel/doctor.sh"; sift_doctor "$@" ;;
   focus)       . "$SIFT_PLUGIN_ROOT/kernel/scope_guard.sh"; sift_focus "$@" ;;
