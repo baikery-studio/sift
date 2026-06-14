@@ -31,6 +31,19 @@ member packet). The driver never hand-rolls `log_append`.
 - `packet.emit`: a scaffolded covering packet, e.g. `{"packet":"<id>","reason":"coverage gap"}`.
 - `coverage.gap`: an uncovered requirement.
 
+## Coverage-fed replanning (append-only)
+
+`sift coverage <wave>` is ADVISORY: a weak token-overlap heuristic that prints which
+`goal_requirements` no member packet covers, mutating nothing. `sift drive` feeds that report
+back as APPEND-ONLY replanning before it runs the loop: for each UNCOVERED requirement it
+scaffolds a covering packet (seeded so its goal covers the requirement), appends the new id to
+the wave manifest `members[]` (and an optional, additive `requirement_map`), and logs a CHAINED
+`packet.emit`. The new packet enters as `submitted`, so the loop's cursor picks it up. An
+all-covered wave replans nothing (gap-driven only). Coverage stays advisory: its heuristic is too
+weak to gate on, so replan is a non-blocking input, never a gate. `packet.emit` is chained but
+inert to state projection, and the scaffold/append/emit path rewrites no prior event, so every
+existing confirmed still replays clean.
+
 ## Reading the trace
 
 `sift trace <wave-id>` reads the VERIFIED log and prints, in chain order, the orchestrator
