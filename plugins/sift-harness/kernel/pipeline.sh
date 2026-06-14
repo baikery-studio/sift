@@ -177,16 +177,13 @@ sift_review() {
   mkdir -p "$SIFT_REVIEWS"
   # W2 reproduce: independent, from clean (committed) state, writing a REAL artifact.
   # A clean tree means the reproduce reflects feature_sha, not uncommitted work; a dirty
-  # tree fails closed with an actionable message. No-git falls to a cleared-env in-place
-  # run recorded as the fresh_clone_unavailable soft floor.
-  local w2art="$SIFT_REVIEWS/$id.w2.json" w2mode="clean_checkout"
+  # tree fails closed with an actionable message.
+  local w2art="$SIFT_REVIEWS/$id.w2.json" w2mode="fresh_clone_unavailable" w2root="$SIFT_REPO_ROOT" _w2wt=""
   if git -C "$SIFT_REPO_ROOT" rev-parse HEAD >/dev/null 2>&1; then
     if [ -n "$(git -C "$SIFT_REPO_ROOT" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
       log_append lane.transition reviewing review_failed "$id" >/dev/null
       echo "[sift] W2 reproduce: uncommitted changes — commit before review" >&2; return 1
     fi
-  else
-    w2mode="fresh_clone_unavailable"
   fi
   # TAMPER-REVIEW-1: re-scan the committed changed set for anti-tamper signatures BEFORE minting
   # the terminal. The execute-time gate only saw two files; a weakened sibling test introduced
@@ -195,9 +192,44 @@ sift_review() {
     log_append lane.transition reviewing review_failed "$id" >/dev/null
     echo "[sift] review: anti-tamper signature hit in the changed set (see $SIFT_STATE/signatures.log) — fix the flagged file and re-execute" >&2; return 1
   fi
-  local w2out; w2out="$(bash "$pd/acceptance/run.sh" "$pf" "$id" 2>/dev/null || true)"
+  # CONTAINMENT (W2-WORKTREE security review): the packet's `test:` becomes `cd <root> && bash
+  # <test>` and is copied into the worktree, so a path that escapes the repo root (absolute, or
+  # any `..` component) would read/execute/write OUTSIDE the clean checkout, defeating the
+  # isolation. Reject such a packet fail-closed BEFORE any worktree/copy/run touches it.
+  local _tc; _tc="$(packet_field "$id" test 2>/dev/null || true)"
+  case "$_tc" in
+    /*|../*|*/../*|*/..)
+      log_append lane.transition reviewing review_failed "$id" >/dev/null
+      echo "[sift] W2: packet test path '$_tc' is not repo-contained (no absolute or .. paths) — review_failed" >&2; return 1 ;;
+  esac
+  # W2-WORKTREE: a TRUE clean-checkout reproduce — run the acceptance from a detached git
+  # worktree of feature_sha in a temp dir, NOT in-place on the working tree, so untracked /
+  # gitignored / uncommitted state cannot leak into "reproduces". The acceptance TEST is the
+  # verification oracle, not feature state: if the test path is gitignored (e.g. the snapshot
+  # test) it is absent from the worktree, so copy it in — the committed FEATURE is still what
+  # runs, so an untracked FEATURE dependency is correctly absent and fails the reproduce. Fall
+  # back to an in-place run recorded as the fresh_clone_unavailable soft floor only when git /
+  # the worktree is genuinely unavailable.
+  local _fsha
+  if git -C "$SIFT_REPO_ROOT" rev-parse --verify --quiet HEAD >/dev/null 2>&1; then
+    _fsha="$(git -C "$SIFT_REPO_ROOT" rev-parse HEAD 2>/dev/null)"
+    _w2wt="$(mktemp -d)"
+    if git -C "$SIFT_REPO_ROOT" worktree add --detach "$_w2wt" "$_fsha" >/dev/null 2>&1; then
+      w2root="$_w2wt"; w2mode="clean_checkout"
+      if [ -n "$_tc" ] && [ -f "$SIFT_REPO_ROOT/$_tc" ] && [ ! -f "$_w2wt/$_tc" ]; then
+        mkdir -p "$_w2wt/$(dirname "$_tc")" 2>/dev/null || true
+        cp "$SIFT_REPO_ROOT/$_tc" "$_w2wt/$_tc" 2>/dev/null || true
+      fi
+    else
+      rm -rf "$_w2wt" 2>/dev/null || true; _w2wt=""    # worktree unavailable -> in-place floor
+    fi
+  fi
+  local w2out; w2out="$(SIFT_REPO_ROOT="$w2root" bash "$pd/acceptance/run.sh" "$pf" "$id" 2>/dev/null || true)"
+  if [ -n "$_w2wt" ]; then
+    git -C "$SIFT_REPO_ROOT" worktree remove --force "$_w2wt" >/dev/null 2>&1 || rm -rf "$_w2wt" 2>/dev/null || true
+  fi
   printf '%s' "$w2out" | _json_true passed \
-    || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] W2 reproduce failed: $(printf '%s' "$w2out" | _json_reason)" >&2; return 1; }
+    || { log_append lane.transition reviewing review_failed "$id" >/dev/null; echo "[sift] W2 reproduce failed ($w2mode): $(printf '%s' "$w2out" | _json_reason)" >&2; return 1; }
   python3 -c 'import json,sys
 try: acc=json.loads(sys.argv[2])
 except Exception: acc={}
