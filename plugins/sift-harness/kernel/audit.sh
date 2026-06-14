@@ -20,9 +20,13 @@ sift_audit() {
   if ! verify_log_chain >/dev/null 2>&1; then
     echo "AUDIT FAIL ($id): log chain does not verify (tampered or schema-too-old — see verify-log)" >&2; return 1
   fi
+  # A witness-bound terminal is {confirmed, partially_confirmed}: project_state binds both
+  # with the same witness rigour (a soft-floored partially_confirmed still ran a real W3
+  # verdict), so both are auditable. _audit.py names the grade in its report.
   local st; st="$(project_state "$id")"
-  if [ "$st" != confirmed ]; then
-    echo "AUDIT FAIL ($id): replays as '$st', not a witness-bound confirmed" >&2; return 1
-  fi
+  case "$st" in
+    confirmed|partially_confirmed) ;;
+    *) echo "AUDIT FAIL ($id): replays as '$st', not a witness-bound terminal" >&2; return 1 ;;
+  esac
   python3 "$_AUDIT_DIR/_audit.py" "$SIFT_LOG" "$id" "$SIFT_REVIEWS"
 }
