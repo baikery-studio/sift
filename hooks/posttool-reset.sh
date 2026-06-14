@@ -48,6 +48,20 @@ EOF
 # Emit an engage signal offering setup instead of silently passing.
 if { [ "$kind" = "edit" ] || [ "$kind" = "bashwrite" ]; } \
    && [ ! -d "$SIFT_REPO_ROOT/.harness" ] && [ ! -f "$SIFT_REPO_ROOT/sift-harness.config.json" ]; then
+  # ENGAGE-COLD-1: arm a DISTINCT cold-engage marker so the Stop hook can BLOCK on it (the
+  # nudge alone let the turn end — the harness was advisory in exactly the moment it matters
+  # most). The marker shares unpacketed-edit's lifecycle: reset per session by sessionstart.sh,
+  # cleared by `sift focus --clear`, and treated as stale by stop-block once `sift setup` writes
+  # config. Arming creates .harness/state/ as a side effect; stop-block keys the cold-engage
+  # gate on config (the setup-completion marker), so that side effect does not satisfy "set up".
+  mkdir -p "$SIFT_STATE" 2>/dev/null || true
+  printf 'edited=%s\n' "${path:-via-bash}" > "$SIFT_STATE/cold-engage" 2>/dev/null || true
+  # Also arm the FORT-1 marker: the edit is unpacketed regardless of setup state. Once the
+  # agent runs `sift setup` (config appears), stop-block clears the now-stale cold-engage and
+  # hands off to FORT-1 — so a cold edit cannot be laundered into a clean Stop by running setup
+  # without ever driving the edit through a packet. cold-engage is checked first, so a STILL
+  # cold repo offers `sift setup` (not `sift packet new`).
+  printf 'edited=%s\n' "${path:-via-bash}" > "$SIFT_STATE/unpacketed-edit" 2>/dev/null || true
   python3 -c 'import json,sys
 print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":sys.argv[1]}}))' \
     "[sift] no .harness/ in this repo — the harness is not set up and is inert (completion is NOT witness-checked). Run \`sift setup\` to engage it, then \`sift init-claudemd\` to make the loop a standing rule." 2>/dev/null \
