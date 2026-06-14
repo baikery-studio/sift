@@ -10,14 +10,74 @@
 _DRIVE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 . "$_DRIVE_DIR/config.sh"; . "$_DRIVE_DIR/state.sh"; . "$_DRIVE_DIR/lock.sh"
 . "$_DRIVE_DIR/next.sh"; . "$_DRIVE_DIR/wave.sh"; . "$_DRIVE_DIR/orchestrate.sh"
-. "$_DRIVE_DIR/pipeline.sh"
+. "$_DRIVE_DIR/scaffold.sh"; . "$_DRIVE_DIR/pipeline.sh"
 SIFT_STATE="${SIFT_STATE:-$(config_path state)}"
+SIFT_PACKETS="${SIFT_PACKETS:-$(config_path packets)}"
+
+# ORCH-2: APPEND-ONLY, coverage-fed replanning. sift_coverage's ADVISORY UNCOVERED report (a
+# weak token-overlap heuristic — kept advisory, never a gate) becomes an INPUT: for each gap
+# requirement, scaffold a covering packet (seeded so its goal covers the requirement), append it
+# to the wave manifest members[], and log a CHAINED packet.emit. New packets enter as `submitted`
+# so the loop's next-cursor picks them up. An ALL-COVERED wave replans NOTHING (gap-driven only).
+# CORE-SAFETY: packet.emit is chained but INERT to state projection (replay consumes only
+# lane.transition); it moves no state and the scaffold/append/emit path rewrites no prior event,
+# so every existing confirmed still replays clean. Zero egress.
+_drive_replan() {
+  local wid="$1"
+  local man="$SIFT_REPO_ROOT/tasks/waves/$wid.json"
+  [ -f "$man" ] || return 0
+  local gaps; gaps="$(sift_coverage "$wid" 2>/dev/null | sed -n 's/^[[:space:]]*UNCOVERED:[[:space:]]*//p')"
+  [ -n "$gaps" ] || return 0                              # all covered (or no requirements) -> no-op
+  # Keep only gap lines that are GENUINE manifest goal_requirements entries. A multi-line or
+  # malformed requirement (a newline inside the JSON string) splits across coverage's per-line
+  # output; matching each extracted line against the authoritative manifest set drops those
+  # fragments, so a malformed requirement never scaffolds orphan packets (it stays an advisory,
+  # unaddressed gap — coverage is advisory, not a gate).
+  gaps="$(SIFT_GAPS="$gaps" python3 -c 'import json,os,sys
+try: reqs=set(json.load(open(sys.argv[1])).get("goal_requirements",[]))
+except Exception: reqs=set()
+for line in os.environ.get("SIFT_GAPS","").split("\n"):
+    if line and line in reqs: print(line)' "$man" 2>/dev/null)"
+  [ -n "$gaps" ] || return 0
+  local n=0 req newid
+  while IFS= read -r req; do
+    [ -n "$req" ] || continue
+    n=$((n + 1)); newid="$wid-cover-$n"
+    while [ -e "$SIFT_PACKETS/$newid.md" ]; do n=$((n + 1)); newid="$wid-cover-$n"; done
+    sift_scaffold "$newid" --profile software >/dev/null 2>&1 \
+      || { echo "[sift] drive $wid: could not scaffold a covering packet for gap '$req'" >&2; continue; }
+    # seed the covering packet's goal = the requirement, so coverage now sees it covered (the
+    # token overlap matches). Use a function replacement so the requirement text is literal (no
+    # regex backref surprises) and only the first frontmatter goal: line is rewritten.
+    SIFT_REQ="$req" python3 -c 'import os,re,sys
+p=sys.argv[1]; req=os.environ["SIFT_REQ"]
+t=open(p).read()
+t=re.sub(r"(?m)^goal:.*$", lambda m: "goal: "+req, t, count=1)
+open(p,"w").write(t)' "$SIFT_PACKETS/$newid.md" 2>/dev/null || true
+    # append the new id to the manifest members[] (+ an OPTIONAL, additive requirement->member map).
+    SIFT_REQ="$req" SIFT_NEWID="$newid" python3 -c 'import json,os,sys
+p=sys.argv[1]; nid=os.environ["SIFT_NEWID"]
+d=json.load(open(p)); m=d.setdefault("members",[])
+if nid not in m: m.append(nid)
+d.setdefault("requirement_map",{})[os.environ.get("SIFT_REQ","")]=nid
+json.dump(d,open(p,"w"),indent=2)' "$man" 2>/dev/null || true
+    # CHAINED packet.emit (inert to replay), recording {requirement, packet}.
+    sift_orch_log "$wid" packet.emit "$(SIFT_REQ="$req" SIFT_NEWID="$newid" python3 -c 'import json,os
+print(json.dumps({"requirement":os.environ["SIFT_REQ"],"packet":os.environ["SIFT_NEWID"]}))')" 2>/dev/null || true
+  done <<EOF
+$gaps
+EOF
+}
 
 sift_drive() {
   case "${1:-}" in
     --help|-h|"") echo "usage: sift drive <wave-id> — drive the wave to ALL-CONFIRMED then wave-review (done is derived from the log, never asserted)"; [ -z "${1:-}" ] && return 1 || return 0 ;;
   esac
   local wid="$1"
+  # ORCH-2: coverage-fed append-only replan BEFORE the drive loop — scaffold covering packets for
+  # any UNCOVERED requirement so the loop's cursor then picks them up. Gap-driven only; no-op when
+  # fully covered. Advisory coverage in, append-only plan growth out; the trust core is untouched.
+  _drive_replan "$wid" || true
   # If killed mid-iteration (while holding the dispatch lock), release it so the next run is not
   # wedged. (lock.sh's PID-liveness reclaim would also recover it, but this is immediate.)
   trap 'SIFT_DRIVE_OWNS_LOCK=; sift_lock_release 2>/dev/null || true; trap - INT TERM; return 130' INT TERM
