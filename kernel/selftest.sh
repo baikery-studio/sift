@@ -17,6 +17,12 @@ sift_selftest() {
     ran=$((ran+1))
     if bash "$t" >/dev/null 2>&1; then echo "  ok   $(basename "$t")"; else echo "  FAIL $(basename "$t")"; fails=$((fails+1)); fi
   done
+  if [ "$ran" -eq 0 ]; then
+    # a plugin-only install ships no tests/ — that is not a failure, but "0/0 suites green"
+    # reads as a broken run. Say so plainly and skip the coverage check (which needs tests).
+    echo "  selftest: no test suite in this install (the suite ships with the source repo, not the plugin bundle)"
+    return 0
+  fi
   echo "  selftest: $((ran-fails))/$ran suites green"
   # coverage orphan-check (logic in _selftest_cov.py — avoids heredoc-in-$() on bash 3.2)
   orphans="$(python3 "$_ST_DIR/_selftest_cov.py" "$root")"

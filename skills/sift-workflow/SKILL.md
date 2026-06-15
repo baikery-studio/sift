@@ -34,9 +34,20 @@ are the `/sift-*` commands).
 4. **Execute.** `sift execute <id>` runs the acceptance check (`→ acceptance_met`).
    If it fails, fix and re-run; don't proceed on red.
 
-5. **Review.** `sift review <id>` runs the witnesses (W2 reproduce, W3 review, W4
-   wiring) and, only if they pass, writes a witness-bound `confirmed` event and
-   clears the focus. Check `sift state <id>` → `confirmed`.
+5. **Review the diff (under an agent host, this is YOUR job).** Under a detected agent
+   host the default W3 certifies a host-written review, so before you review the packet,
+   judge the diff against the R1-R13 rubric (the `reviewer-prompt.overlay` lists it), write
+   your verdict JSON (`{"verdict":"pass"|"reject","confidence",rubric:{R1..R13}}`, each Rk a
+   pass/fail token; an all-fail rubric under a pass verdict is rejected) to an in-scope
+   staging file, and land it with `sift w3-verdict <id> <staging>`. The scope guard denies a
+   direct `.harness/` write, so the verb is the only door. Offline/CI stays keyless and skips
+   this step.
+
+6. **Commit, then review.** Commit your change first: W2 reproduces from the clean
+   committed tree (`feature_sha`), so uncommitted work fails the witness with
+   "commit before review." Then `sift review <id>` runs the witnesses (W2 reproduce,
+   W3 review, W4 wiring) and, only if they pass, writes a witness-bound `confirmed`
+   event and clears the focus. Check `sift state <id>` → `confirmed`.
 
 If you're resuming after a break, `sift next <wave>` tells you the next actionable
 packet (state is replayed from the log, so it survives a context compaction).
@@ -48,9 +59,12 @@ packet (state is replayed from the log, so it survives a context compaction).
   enforcement.** A `confirmed` that no witness backed replays as `corrupt`.
 - **The scope guard is advisory**, it protects only when the host runs the
   PreToolUse hook; it is not a kernel sandbox.
-- **Review is keyless and local.** W3 runs a deterministic structural check: no model
-  API, no network, no keys, nothing leaves your machine. Under Claude Code the agent
-  driving the loop is itself the model doing the real review.
+- **Review is keyless and local, and zero egress either way.** Offline/CI, W3 runs a
+  deterministic structural check (no model API, no network, no keys, nothing leaves your
+  machine). Under a detected agent host the default flips: W3 validates the host-written
+  R1-R13 verdict you land via `sift w3-verdict` (still no network, no keys, nothing leaves
+  the machine, the agent in the loop is the reviewer). `SIFT_W3_HOST_VERDICT=off` forces
+  keyless.
 
 ## Limits
 

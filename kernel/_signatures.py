@@ -22,7 +22,8 @@ _TEST_NAME = re.compile(
     # test-named files, plus conftest/fixtures/setup helpers that a test imports — a
     # skip decorator in conftest.py has the same effect as one in the test, so it must
     # be scanned too (else it's a gate bypass).
-    r'(^|/)(test_[^/]*|[^/]*_test|[^/]*\.test|[^/]*\.spec|conftest|setup_tests?)\.(py|js|ts|jsx|tsx|go|rb|java)$'
+    r'(^|/)(test_[^/]*|[^/]*_test|[^/]*\.test|[^/]*\.spec|conftest|setup_tests?)\.(py|js|ts|jsx|tsx|go|rb|java|cs|sh)$'
+    r'|(^|/)[^/]*Tests?\.cs$'
     r'|(^|/)(tests?|fixtures?|__tests__)/')
 _STR = re.compile(r'"[^"]*"|\'[^\']*\'')
 
@@ -34,11 +35,19 @@ _TEST_TAMPER = [
     (re.compile(r'@(unittest\.)?skip\w*\b'), 'unittest skip*/skipIf/skipUnless decorator'),
     (re.compile(r'\bt\.Skip\('), 'go t.Skip()'),
     (re.compile(r'\banswers_for_tests\s*='), 'hardcoded-answer map'),
+    # C# xUnit/NUnit/MSTest skip attributes.
+    (re.compile(r'\[\s*(Fact|Theory)\s*\(\s*Skip\s*='), 'xUnit [Fact/Theory(Skip=...)]'),
+    (re.compile(r'\[\s*Ignore\b'), 'NUnit/MSTest [Ignore]'),
 ]
 # triple-quoted strings span lines -> strip on the whole text (DOTALL) before the
 # per-line single/double strip, so a tamper token inside a docstring isn't a false hit.
 _TRIPLE = re.compile(r'""".*?"""|\'\'\'.*?\'\'\'', re.S)
-_COMMENTED_ASSERT = re.compile(r'^\s*(#|//)\s*(assert\b|expect\s*\()')
+# A commented-out assertion: line (#, //) OR C-block (/* expect(...) */) comment.
+_COMMENTED_ASSERT = re.compile(r'^\s*(#|//|/\*)\s*(assert\b|expect\s*\()')
+# A test-function header (Python/Go/JS-BDD), used to detect an early-return/pass body.
+_TESTFN_HEADER = re.compile(r'\bdef\s+test\w*\s*\(|\bfunc\s+Test\w*\s*\(|\b(it|test|describe)\s*\(')
+# A bare early return / pass that, as the FIRST body statement, dead-codes the test.
+_EARLY_RET = re.compile(r'^\s*(return(\s+(None|nil|null|true|false|[A-Za-z_0-9.]+))?\s*;?|pass)\s*$')
 _CI_TAMPER = [
     (re.compile(r'continue-on-error:\s*true'), 'continue-on-error: true'),
     (re.compile(r'if:\s*always\(\)'), 'if: always()'),
@@ -74,14 +83,36 @@ def scan(path):
     cif = _is_ci_file(path, text)
     text = _TRIPLE.sub('', text)               # drop triple-quoted strings (docstrings) first
     hits = []
-    for ln in text.splitlines():
+    lines = text.splitlines()
+    in_block = False                            # inside a /* ... */ block comment
+    prev_header_idx = None                      # index of the last test-function header seen
+    for i, ln in enumerate(lines):
         if testf and _COMMENTED_ASSERT.search(ln):
             hits.append(('TAMPER', 'commented-out assert/expect', ln.strip()))
+        # multi-line block comment: an assertion buried inside /* ... */ on its own line
+        if testf:
+            stripped = ln.strip()
+            if in_block:
+                if re.search(r'\b(assert\b|expect\s*\()', stripped):
+                    hits.append(('TAMPER', 'assert/expect inside a block comment', stripped))
+                if '*/' in stripped:
+                    in_block = False
+            elif stripped.startswith('/*') and '*/' not in stripped:
+                in_block = True
         code = _STR.sub('', ln)            # strip string literals before code patterns
         if testf:
             for rx, label in _TEST_TAMPER:
                 if rx.search(code):
                     hits.append(('TAMPER', label, ln.strip()))
+            # early-return/pass that dead-codes the test body: a bare return/pass as the
+            # FIRST body statement right after a test-function header (a conditional return
+            # under an `if` is not the first statement, so it is not flagged).
+            if _TESTFN_HEADER.search(code):
+                prev_header_idx = i
+            elif prev_header_idx is not None and code.strip():
+                if _EARLY_RET.match(code):
+                    hits.append(('TAMPER', 'early return/pass dead-codes test body', ln.strip()))
+                prev_header_idx = None   # only the first body statement is checked
         if cif:
             for rx, label in _CI_TAMPER:
                 if rx.search(ln):

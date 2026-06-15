@@ -8,6 +8,13 @@ _SETUP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 sift_setup() {
   root="${SIFT_REPO_ROOT:-$(pwd)}"
   mkdir -p "$root/.harness/reviews" "$root/.harness/runs" "$root/tasks/packets" "$root/evals/snapshots"
+  # gitignore the append-only runtime state (.harness/ = hash-chained log + reviews + runs;
+  # .canary/) so a user does not silently commit it. tasks/ and evals/ are NOT ignored —
+  # packets and acceptance tests are the user's authored work, which they may commit.
+  gi="$root/.gitignore"
+  for _e in ".harness/" ".canary/"; do
+    if [ ! -f "$gi" ] || ! grep -qxF "$_e" "$gi" 2>/dev/null; then printf '%s\n' "$_e" >> "$gi"; fi
+  done
   cfg="$root/sift-harness.config.json"
   if [ ! -f "$cfg" ]; then
     python3 -c 'import json,sys

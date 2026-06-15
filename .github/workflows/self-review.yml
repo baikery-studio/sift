@@ -1,0 +1,33 @@
+name: self-review
+
+# The harness reviews its own pull requests with its own witnesses — KEYLESS, so it
+# runs on fork PRs too (no secrets, no network, no API key). Blocking: a PR cannot
+# merge unless the keyless witness suite, the trust-core forge-rejection proofs, the
+# zero-egress guard, and the tamper-evident log check all pass on the PR's code.
+# This is the non-hypocrisy gate — the engine holds its own PRs to the bar it sells.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-review:
+    name: self-review (keyless witnesses)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0   # full history so the witnesses see the PR diff base
+      - name: keyless witness suite (selftest + coverage)
+        run: ./bin/sift selftest
+      - name: trust-core forge-rejection proofs
+        run: bash tests/spine-trustcore.sh
+      - name: zero-egress guard
+        run: bash tests/test-no-egress.sh
+      - name: tamper-evident log verification
+        # empty/absent log verifies as "chain ok: 0 events" (exit 0); a non-zero exit
+        # is a real tamper and must block the merge. No `|| true`.
+        run: ./bin/sift verify-log

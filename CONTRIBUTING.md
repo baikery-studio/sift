@@ -6,8 +6,10 @@ holds itself to the discipline it sells: every change is proven, not asserted.
 ## The one rule
 
 **No change lands without a green acceptance test and a clean self-check.** The engine reviews
-its own pull requests, `self-review.yml` runs the witness pipeline on the PR diff as a blocking
-check, and a claim in a doc that the code does not back is a bug.
+its own pull requests: `self-review.yml` runs the keyless witness suite (selftest, trust-core
+forge-rejection proofs, the zero-egress guard, and tamper-evident log verification) on every PR
+as a blocking check. It is keyless, so it runs on fork PRs too. A claim in a doc that the code
+does not back is a bug.
 
 ## Setup
 

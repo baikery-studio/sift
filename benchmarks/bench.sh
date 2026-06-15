@@ -78,19 +78,23 @@ EOF
   rm -rf "$w"
 }
 
+# Deterministic, bash-version-independent task schedule. $RANDOM produces DIFFERENT sequences
+# on bash 3.2 (macOS) and bash 5 (Linux) from the same seed, so a RANDOM-driven draw made the
+# aggregate assertions platform-dependent and flaky (D4 = the 4th defect in a trial only
+# appeared when one trial happened to draw >=4 defects). Instead: an evenly spread DEFECT_PCT
+# of tasks are defects (Bresenham), and defect classes round-robin GLOBALLY (defi spans the
+# whole run, not per-trial), so D1..D4 each appear once >=4 defects accrue across the run.
+# Identical on every bash, so a local pass implies a CI pass.
+g=0; defi=0
 trials="["
 for trial in $(seq 1 "$T"); do
-  # NOTE: RANDOM is seeded per-trial for reproducibility WITHIN a bash version, but
-  # bash 3.2 (macOS) and bash 5 (Linux) generate different sequences from the same
-  # seed — so exact per-trial defect counts vary across platforms. The aggregate
-  # assertions (catch-rate < 1.0, harness > baseline, 0 false-blocks) hold regardless.
-  RANDOM=$trial; defi=0
   un_c=0; un_e=0; ha_c=0; ha_e=0; defs=0; fb=0
   for k in $(seq 1 "$K"); do
-    if [ "$((RANDOM % 100))" -lt "$DEFECT_PCT" ]; then
+    if [ "$(( (g+1)*DEFECT_PCT/100 - g*DEFECT_PCT/100 ))" -gt 0 ]; then
       case "$((defi % 4))" in 0) typ=D1 ;; 1) typ=D2 ;; 2) typ=D3 ;; 3) typ=D4 ;; esac
       defi=$((defi+1)); defs=$((defs+1))
     else typ=clean; fi
+    g=$((g+1))
     set -- $(run_task "$typ"); hv="$1"; uv="$2"
     if [ "$typ" = clean ]; then
       [ "$hv" = NOT-CONFIRMED ] && fb=$((fb+1))

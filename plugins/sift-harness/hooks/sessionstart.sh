@@ -29,6 +29,15 @@ wid="${1:-phase1}"
 # SIFT_REPO_ROOT, before falling back to cwd. Export so bin/sift inherits it.
 export SIFT_REPO_ROOT="${CLAUDE_PROJECT_DIR:-${SIFT_REPO_ROOT:-$(pwd)}}"
 
+# SOTA-2: the EXPLICIT agent-host signal. A SessionStart hook only fires inside a live agent
+# host, so its execution IS proof an agent is present — set the generic, host-agnostic marker
+# (not inferred from any ambient dir) so the default W3 regime becomes the host-written R1-R13
+# review. On a host that propagates hook env into the session shell this reaches `sift review`
+# directly; where it does not, the same default is reachable via SIFT_W3_REQUIRE_HOST_VERDICT=1
+# or the profile flag. SIFT_W3_HOST_VERDICT=off opts back out. Never keyed off CLAUDE_PROJECT_DIR
+# (CI exports it) so the keyless offline/CI path and the selftest stay unchanged.
+export SIFT_AGENT_HOST=1
+
 next="$("$SIFT" next "$wid" 2>/dev/null || echo UNKNOWN)"
 
 BREADCRUMB="$SIFT_REPO_ROOT/.harness/resume.breadcrumb"
@@ -51,6 +60,12 @@ fi
 . "$HOOK_DIR/../kernel/config.sh" 2>/dev/null || true
 SIFT_STATE="${SIFT_STATE:-$(config_path state 2>/dev/null || echo "$SIFT_REPO_ROOT/.harness")}"
 rm -f "$SIFT_STATE/unpacketed-edit" 2>/dev/null || true
+# ENGAGE-COLD-1: same per-session reset for the cold-repo engage marker. Reached only once
+# .harness/ exists (the line-44 guard skips a truly-untouched cold repo — which has no marker
+# to reset anyway). The case that matters: a repo cold-edited in a PRIOR session armed the
+# marker AND created .harness/, so a fresh edit-free session here resets it and ends freely —
+# the gate is armed by an edit this session, not by lingering coldness.
+rm -f "$SIFT_STATE/cold-engage" 2>/dev/null || true
 
 # Standing primer (injected once per session as additionalContext): point the agent at the
 # harness as the law of this repo, so "use the harness" / any rigor-worthy task drives the

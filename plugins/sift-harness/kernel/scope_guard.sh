@@ -12,12 +12,26 @@ SIFT_PACKETS="${SIFT_PACKETS:-$(config_path packets)}"
 scope_guard_decision() {
   local tool="${1:-}" path="${2:-}"
   local foc; foc="$(cat "$SIFT_STATE/focus" 2>/dev/null || true)"
-  foc="$(printf '%s' "$foc" | tr -d '[:space:]')"   # whitespace-only focus == empty (caught below)
+  foc="${foc//[[:space:]]/}"   # whitespace-only focus == empty (caught below); pure bash, no
+                               # subprocess/tr in the fence's decision path (fail-closed even on
+                               # a stripped PATH where tr might be absent)
   case "$tool" in
     __PARSE_ERROR__)                           # unparseable/suspicious payload
       [ -n "$foc" ] && { echo "DENY (unparseable hook payload while focus=$foc — fail-closed)"; return 2; }
       echo "ALLOW (unparseable payload, no active focus)"; return 0 ;;
-    Edit|Write|MultiEdit|NotebookEdit) ;;      # only fence edit tools
+    Edit|Write|MultiEdit|NotebookEdit)         # fence write tools (Bash targets arrive as Write)
+      # HARD-DENY the trust substrate for any write intent, focus or not: the worker
+      # must never write .harness/ or .canary/ directly (the forge channel).
+      case "$path" in
+        .harness/*|*/.harness/*|.canary/*|*/.canary/*)
+          echo "DENY ($path is under .harness/ or .canary/ — trust substrate, never agent-writable)"; return 2 ;;
+        __OPAQUE_BASH__)
+          # a Bash command whose write targets can't be statically verified (eval,
+          # interpreters, command substitution, dd, xargs, find -exec, ...). FAIL CLOSED
+          # under an active focus; with none, allow (consistent with edit-tool behavior).
+          [ -n "$foc" ] && { echo "DENY (opaque Bash under active focus — unverifiable write targets; route writes through Edit/Write or split the command)"; return 2; }
+          echo "ALLOW (opaque Bash, no active focus)"; return 0 ;;
+      esac ;;
     *) echo "ALLOW (non-edit tool: $tool)"; return 0 ;;
   esac
   # tool is an edit tool here. Distinguish "no focus" (ALLOW) from "focus declared
@@ -40,8 +54,9 @@ sift_focus() {
   mkdir -p "$SIFT_STATE"
   if [ "$#" -eq 0 ]; then cat "$SIFT_STATE/focus" 2>/dev/null || echo "(no focus)"; return 0; fi
   if [ "$1" = "--clear" ]; then
-    # also disarm the FORT-1 engage-gate marker — stop-block.sh names `sift focus --clear`
-    # as the throwaway escape, so it must actually release the turn (code-review HIGH).
-    rm -f "$SIFT_STATE/focus" "$SIFT_STATE/unpacketed-edit"; echo "[sift] focus cleared"; return 0; fi
+    # also disarm the FORT-1 + ENGAGE-COLD-1 engage-gate markers — stop-block.sh names
+    # `sift focus --clear` as the throwaway escape for both, so it must actually release the
+    # turn (code-review HIGH).
+    rm -f "$SIFT_STATE/focus" "$SIFT_STATE/unpacketed-edit" "$SIFT_STATE/cold-engage"; echo "[sift] focus cleared"; return 0; fi
   printf '%s\n' "$1" > "$SIFT_STATE/focus"; echo "[sift] focus: $1"
 }

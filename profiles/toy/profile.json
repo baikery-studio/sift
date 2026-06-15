@@ -1,6 +1,6 @@
 {
   "name": "toy",
-  "kernel_version": ">=1.0.0",
+  "kernel_version": ">=0.1.0",
   "task_schema": "./task-schema.json",
   "acceptance": {
     "runner": "shell",

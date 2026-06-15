@@ -5,23 +5,23 @@
     "defect_pct": 40,
     "keyless": true
   },
-  "defects": 32,
+  "defects": 28,
   "unharnessed": {
-    "caught": 19,
-    "escaped": 13,
-    "catch_rate": 0.5938,
+    "caught": 14,
+    "escaped": 14,
+    "catch_rate": 0.5,
     "escaped_per_trial": {
-      "mean": 1.083,
-      "std": 0.515
+      "mean": 1.167,
+      "std": 0.389
     }
   },
   "harnessed": {
-    "caught": 30,
-    "escaped": 2,
-    "catch_rate": 0.9375,
+    "caught": 21,
+    "escaped": 7,
+    "catch_rate": 0.75,
     "escaped_per_trial": {
-      "mean": 0.167,
-      "std": 0.389
+      "mean": 0.583,
+      "std": 0.515
     }
   },
   "false_blocks": 0,
@@ -34,19 +34,19 @@
   "trials": [
     {
       "trial": 1,
-      "defects": 4,
-      "un_caught": 2,
-      "un_escaped": 2,
-      "ha_caught": 3,
-      "ha_escaped": 1,
+      "defects": 2,
+      "un_caught": 1,
+      "un_escaped": 1,
+      "ha_caught": 2,
+      "ha_escaped": 0,
       "false_blocks": 0
     },
     {
       "trial": 2,
-      "defects": 5,
-      "un_caught": 3,
-      "un_escaped": 2,
-      "ha_caught": 4,
+      "defects": 2,
+      "un_caught": 1,
+      "un_escaped": 1,
+      "ha_caught": 1,
       "ha_escaped": 1,
       "false_blocks": 0
     },
@@ -61,20 +61,20 @@
     },
     {
       "trial": 4,
-      "defects": 3,
-      "un_caught": 2,
+      "defects": 2,
+      "un_caught": 1,
       "un_escaped": 1,
-      "ha_caught": 3,
-      "ha_escaped": 0,
+      "ha_caught": 1,
+      "ha_escaped": 1,
       "false_blocks": 0
     },
     {
       "trial": 5,
-      "defects": 1,
+      "defects": 3,
       "un_caught": 1,
-      "un_escaped": 0,
-      "ha_caught": 1,
-      "ha_escaped": 0,
+      "un_escaped": 2,
+      "ha_caught": 2,
+      "ha_escaped": 1,
       "false_blocks": 0
     },
     {
@@ -91,8 +91,8 @@
       "defects": 2,
       "un_caught": 1,
       "un_escaped": 1,
-      "ha_caught": 2,
-      "ha_escaped": 0,
+      "ha_caught": 1,
+      "ha_escaped": 1,
       "false_blocks": 0
     },
     {
@@ -106,20 +106,20 @@
     },
     {
       "trial": 9,
-      "defects": 3,
-      "un_caught": 2,
+      "defects": 2,
+      "un_caught": 1,
       "un_escaped": 1,
-      "ha_caught": 3,
-      "ha_escaped": 0,
+      "ha_caught": 1,
+      "ha_escaped": 1,
       "false_blocks": 0
     },
     {
       "trial": 10,
-      "defects": 2,
+      "defects": 3,
       "un_caught": 1,
-      "un_escaped": 1,
+      "un_escaped": 2,
       "ha_caught": 2,
-      "ha_escaped": 0,
+      "ha_escaped": 1,
       "false_blocks": 0
     },
     {
@@ -136,8 +136,8 @@
       "defects": 2,
       "un_caught": 1,
       "un_escaped": 1,
-      "ha_caught": 2,
-      "ha_escaped": 0,
+      "ha_caught": 1,
+      "ha_escaped": 1,
       "false_blocks": 0
     }
   ],

@@ -35,6 +35,31 @@ evals/snapshots/superseded/
 docs/DEV_PLAN_2026-06.md
 docs/ROADMAP.md
 tasks/
-evals/snapshots/
+# ignore the eval-snapshot scratch by default, but allow git to descend so the specific
+# acceptance oracles below can be re-included (a wholesale `evals/snapshots/` ignore blocks
+# re-inclusion of any child — git cannot un-exclude a path under an excluded directory).
+evals/snapshots/*
+# ...but the acceptance oracles the durable tests/ suite delegates to MUST ship: CI runs
+# them via `sift selftest` on a fresh clone (no gitignored scratch present). Each is a
+# self-contained test.sh that builds its own temp repo. Keep this list in sync with the
+# tracked tests/*.sh delegators (a tracked test depending on a gitignored file fails in CI).
+!evals/snapshots/AUDIT-PROVENANCE/
+!evals/snapshots/ENGAGE-COLD-1/
+!evals/snapshots/FENCE-DEVNULL-1/
+!evals/snapshots/ORCH-1-DRIVE-LOOP/
+!evals/snapshots/ORCH-2-GAP-REPLAN/
+!evals/snapshots/ORCH-3-ECONOMIC-STOP/
+!evals/snapshots/ORCH-4-DECISION-TRACE/
+!evals/snapshots/SCALE-MEMO/
+!evals/snapshots/SOTA-1-AUDIT-BUNDLE/
+!evals/snapshots/SOTA-2-SEMANTIC-DEFAULT/
+!evals/snapshots/SOTA-3-SIGN-VERDICT/
+!evals/snapshots/TAMPER-REVIEW-1/
+!evals/snapshots/TRUST-AUDIT-1/
+!evals/snapshots/W2-WORKTREE/
+!evals/snapshots/W3-SEM-1/
+!evals/snapshots/W3-WRITE-VERB-1/
+!evals/snapshots/W4-CALLER-1/
+!evals/snapshots/WITNESS-PLATFORM/
 docs/spec/SIFT_HARNESS_FAMILY.md
 docs/spec/KANBAN_ENFORCEMENT.md

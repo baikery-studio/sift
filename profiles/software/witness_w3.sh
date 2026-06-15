@@ -41,10 +41,91 @@ _w3_keyless() {
   fi
 }
 
+# Host-verdict mode (UP-1, zero egress): instead of W3 minting its own structural
+# pass, the driving agent writes an R1-R13 rubric verdict to the W3 artifact and W3
+# VALIDATES it. No network, no keys — the agent in the loop is the reviewer.
+#
+# SOTA-2: host mode is the DEFAULT under a detected agent host. The signal is the EXPLICIT
+# SIFT_AGENT_HOST=1 that hooks/sessionstart.sh sets (a SessionStart hook only fires inside a
+# live agent host, so its execution IS the host signal). It is deliberately NOT keyed off
+# ambient CLAUDE_PROJECT_DIR: CI routinely exports that, and auto-detecting it would silently
+# flip CI into requiring a host verdict and break the keyless selftest. Precedence:
+#   1. SIFT_W3_REQUIRE_HOST_VERDICT=1  -> force host mode on (explicit override).
+#   2. SIFT_W3_HOST_VERDICT=off        -> force keyless (explicit opt-out of the auto-default).
+#   3. SIFT_AGENT_HOST=1               -> agent host present -> host mode (the SOTA-2 default).
+#   4. profile witnesses.w3.require_host_verdict: true.
+# Offline / CI (none of the above) stays KEYLESS, so the selftest is unchanged.
+_w3_host_mode() {
+  [ "${SIFT_W3_REQUIRE_HOST_VERDICT:-}" = "1" ] && return 0
+  # opt-out is forgiving: off/0/false/no, any case, trimmed (it only ever makes W3 LESS strict,
+  # so a lenient match cannot weaken trust — it falls back to the keyless structural floor).
+  _hv="$(printf '%s' "${SIFT_W3_HOST_VERDICT:-}" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  case "$_hv" in off|0|false|no) return 1 ;; esac
+  [ "${SIFT_AGENT_HOST:-}" = "1" ] && return 0
+  python3 -c 'import json,sys
+try: v=json.load(open(sys.argv[1]))["witnesses"]["w3"].get("require_host_verdict",False)
+except Exception: v=False
+sys.exit(0 if v is True else 1)' "$W3_HERE/profile.json" 2>/dev/null
+}
+
+# Validate a host-written verdict artifact: echoes pass|<failreason>; rc 0 only on a
+# well-formed, single-verdict, rubric-complete pass. Fail-closed and injection-resistant
+# (a planted second verdict object -> reject via _w3_extract_verdict).
+_w3_validate_host_verdict() {
+  local art="$1"
+  [ -f "$art" ] || { echo "missing"; return 1; }
+  local v; v="$(SIFT_W3_RAW="$(cat "$art")" _w3_extract_verdict)"
+  [ "$v" = "pass" ] || { echo "${v:-malformed}"; return 1; }
+  SIFT_W3_ART="$art" python3 -c '
+import json,os,sys
+try: d=json.load(open(os.environ["SIFT_W3_ART"]))
+except Exception: print("malformed"); sys.exit(1)
+if d.get("verdict")!="pass": print("reject"); sys.exit(1)
+try: conf=float(d.get("confidence",0))
+except Exception: conf=0.0
+if conf < 0.5: print("low-confidence"); sys.exit(1)
+rub=d.get("rubric")
+if not isinstance(rub,dict): print("no-rubric"); sys.exit(1)
+missing=[k for k in ("R%d"%i for i in range(1,14)) if k not in rub]
+if missing: print("incomplete-rubric"); sys.exit(1)
+# Rubric VALUES carry the real teeth (W3-SEM-1): each Rk first token must be in a CLOSED
+# allowlist of pass/fail tokens. A closed allowlist (not a startswith prefix) so "passable"
+# does not count as a pass and "failsafe" does not count as a fail — an unrecognised token is
+# not a verdict and fails closed (rubric-value-not-a-token). A top-level "pass" while ANY Rk is
+# a fail token is a self-contradicting verdict -> reject. Without this the rubric was
+# decoration: an all-fail rubric under a "pass" verdict slipped through.
+PASS_TOKENS={"pass","passed","passing","ok"}
+FAIL_TOKENS={"fail","failed","failing","reject","rejected"}
+def _tok(x):
+    s=str(x).strip().lower()
+    return s.split()[0] if s else ""
+toks={k:_tok(rub.get(k)) for k in ("R%d"%i for i in range(1,14))}
+bad=[k for k,t in toks.items() if t not in PASS_TOKENS and t not in FAIL_TOKENS]
+if bad: print("rubric-value-not-a-token"); sys.exit(1)
+fails=[k for k,t in toks.items() if t in FAIL_TOKENS]
+if fails: print("rubric-fail-under-pass"); sys.exit(1)
+print("pass")'
+}
+
+# Validate an arbitrary candidate verdict FILE with the exact host-verdict rules above, for
+# the sanctioned `sift w3-verdict` landing verb (W3-WRITE-VERB-1): echoes pass|<failreason>,
+# rc 0 only on a well-formed single-verdict rubric-complete pass. Same single-source validator
+# the agent's verdict must satisfy at review time — no second, looser parser.
+if [ "${1:-}" = "--validate-file" ]; then _w3_validate_host_verdict "${2:-}"; exit $?; fi
+
 witness_w3() {
   local pp="$1" id="$2"
   local reviews="${SIFT_REVIEWS:-.harness/reviews}"; mkdir -p "$reviews"
   local root="${SIFT_REPO_ROOT:-$(pwd)}"
+
+  if _w3_host_mode; then
+    local hres; hres="$(_w3_validate_host_verdict "$reviews/$id.w3.json")"
+    if [ "$hres" = pass ]; then
+      # the host-written verdict IS the artifact — never overwrite it
+      printf '{ "ok": true, "verdict": "pass", "w3_mode": "host" }\n'; return 0
+    fi
+    printf '{ "ok": false, "verdict": "%s", "reason": "host-verdict W3 fail-closed", "w3_mode": "host" }\n' "$hres"; return 1
+  fi
 
   local diff
   diff="$(git -C "$root" diff HEAD 2>/dev/null || true)"

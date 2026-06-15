@@ -20,27 +20,9 @@ payload="$(cat 2>/dev/null || true)"
 # Emits two tab-separated tokens: "<kind>\t<path>" where kind ∈ edit|bashwrite|other and
 # path is the file_path for edit tools (or "_" for bash). Defensive parse → __PARSE_ERROR__.
 read -r kind path <<EOF
-$(printf '%s' "$payload" | python3 -c 'import json,sys,re
-def bash_writes(c):
-    # redirection to a real file (incl. >& file). Skip /dev/null|stderr|stdout and pure
-    # fd-dups (>&1, 2>&1, >&2). A >& with a non-numeric target IS a file write.
-    for m in re.finditer(r"(\d*)(>>?)(&?)\s*([^\s;|&<>]+)", c):
-        fd, op, amp, tgt = m.groups()
-        if tgt in ("/dev/null","/dev/stderr","/dev/stdout"): continue
-        if amp and tgt.isdigit(): continue                 # >&1 / 2>&1 fd-dup, not a file
-        if tgt.startswith("&"): continue
-        return True
-    # write-capable commands, anchored at a command position (start / after ; | & && ||)
-    # so package managers (npm install / pip install) and names like dd-trace do NOT
-    # false-positive (no apostrophes in this block: it is single-quoted python -c).
-    if re.search(r"(?:^|[;|&]|&&|\|\|)\s*(tee|cp|mv|dd|install|truncate|patch|rsync|touch|"
-                 r"rm|mkdir|rmdir|chmod|chown|ln|tar|unzip|gunzip|gzip)\b", c): return True
-    if re.search(r"\b(curl|wget)\b[^|;]*\s-[oO]\b", c): return True          # download-to-file only
-    if re.search(r"\bsed\b[^|;]*\s-i", c): return True                       # sed -i (in-place)
-    if re.search(r"\b(perl|ruby)\b[^|;]*\s-[a-z]*i", c): return True         # perl/ruby -i
-    if re.search(r"\b(python3?|node|ruby|perl)\b[^|;]*-e\b", c): return True # -e inline script (may write)
-    if re.search(r"\bpython3?\b[^|;]*open\([^)]*,\s*[\"'"'"'][wax]", c): return True
-    return False
+$(printf '%s' "$payload" | HOOK_DIR="$HOOK_DIR" python3 -c 'import json,sys,os
+sys.path.insert(0, os.environ.get("HOOK_DIR",""))
+from _bash_write_targets import is_write as bash_writes   # SHARED with the enforcing guard
 try:
     d=json.loads(sys.stdin.read())
     if not isinstance(d, dict): raise ValueError
@@ -59,6 +41,33 @@ try:
 except Exception:
     print("__PARSE_ERROR__\t_")')
 EOF
+
+# UP-4 first-edit engage: a real edit/bashwrite in an UN-SET-UP repo (no .harness/, no
+# config) means the harness is inert and the agent is un-herded — the most dangerous
+# moment (a fresh repo, no loop) is exactly the one a setup-gated harness can't see.
+# Emit an engage signal offering setup instead of silently passing.
+if { [ "$kind" = "edit" ] || [ "$kind" = "bashwrite" ]; } \
+   && [ ! -d "$SIFT_REPO_ROOT/.harness" ] && [ ! -f "$SIFT_REPO_ROOT/sift-harness.config.json" ]; then
+  # ENGAGE-COLD-1: arm a DISTINCT cold-engage marker so the Stop hook can BLOCK on it (the
+  # nudge alone let the turn end — the harness was advisory in exactly the moment it matters
+  # most). The marker shares unpacketed-edit's lifecycle: reset per session by sessionstart.sh,
+  # cleared by `sift focus --clear`, and treated as stale by stop-block once `sift setup` writes
+  # config. Arming creates .harness/state/ as a side effect; stop-block keys the cold-engage
+  # gate on config (the setup-completion marker), so that side effect does not satisfy "set up".
+  mkdir -p "$SIFT_STATE" 2>/dev/null || true
+  printf 'edited=%s\n' "${path:-via-bash}" > "$SIFT_STATE/cold-engage" 2>/dev/null || true
+  # Also arm the FORT-1 marker: the edit is unpacketed regardless of setup state. Once the
+  # agent runs `sift setup` (config appears), stop-block clears the now-stale cold-engage and
+  # hands off to FORT-1 — so a cold edit cannot be laundered into a clean Stop by running setup
+  # without ever driving the edit through a packet. cold-engage is checked first, so a STILL
+  # cold repo offers `sift setup` (not `sift packet new`).
+  printf 'edited=%s\n' "${path:-via-bash}" > "$SIFT_STATE/unpacketed-edit" 2>/dev/null || true
+  python3 -c 'import json,sys
+print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":sys.argv[1]}}))' \
+    "[sift] no .harness/ in this repo — the harness is not set up and is inert (completion is NOT witness-checked). Run \`sift setup\` to engage it, then \`sift init-claudemd\` to make the loop a standing rule." 2>/dev/null \
+  || echo "[sift] no .harness/ — not set up; run 'sift setup' to engage the harness (then 'sift init-claudemd' for the standing rule)" >&2
+  exit 0
+fi
 
 # A Bash file-write with no active packet arms the engage-gate the same as an edit tool
 # (FORT-5). It has no single scoped path, so it only arms the gate — the in-scope

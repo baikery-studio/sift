@@ -1,0 +1,31 @@
+name: host-smoke (non-Claude)
+
+# Moves the host-agnostic claim from attested to OBSERVED: the engine drives the full
+# loop on a bare shell with NO Claude Code, no hooks, no plugin host — only bin/sift.
+# Green here means the trust core travels off Claude Code, not merely that it's claimed.
+# The opencode / codex / aider / bare-CLI paths all reduce to this: any host that can run
+# a shell command runs sift.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bare-shell-drive:
+    name: bin/sift end-to-end on a bare shell (no Claude Code)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: bash + python versions
+        run: |
+          bash --version | head -1
+          python3 --version
+      - name: drive bin/sift setup -> plan -> execute -> review -> confirmed (no host hooks)
+        run: bash tests/spine-selfhost.sh
+      - name: end-to-end setup-to-confirmed via bin/sift (non-Claude host path)
+        run: bash tests/e2e-setup-confirmed.sh
