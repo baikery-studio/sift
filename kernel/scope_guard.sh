@@ -12,7 +12,9 @@ SIFT_PACKETS="${SIFT_PACKETS:-$(config_path packets)}"
 scope_guard_decision() {
   local tool="${1:-}" path="${2:-}"
   local foc; foc="$(cat "$SIFT_STATE/focus" 2>/dev/null || true)"
-  foc="$(printf '%s' "$foc" | tr -d '[:space:]')"   # whitespace-only focus == empty (caught below)
+  foc="${foc//[[:space:]]/}"   # whitespace-only focus == empty (caught below); pure bash, no
+                               # subprocess/tr in the fence's decision path (fail-closed even on
+                               # a stripped PATH where tr might be absent)
   case "$tool" in
     __PARSE_ERROR__)                           # unparseable/suspicious payload
       [ -n "$foc" ] && { echo "DENY (unparseable hook payload while focus=$foc — fail-closed)"; return 2; }

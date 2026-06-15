@@ -35,4 +35,8 @@ if [ "$failed" -gt 0 ]; then
   echo "[corpus] FAILED confirmed snapshots:$failures" >&2
   exit 1
 fi
-echo "[corpus] OK — every confirmed-packet snapshot still passes"
+if [ "$ran" -eq 0 ]; then
+  echo "[corpus] OK — no confirmed-packet snapshots apply in this checkout (the corpus gates a working tree that carries a trust log; on a fresh clone the tracked tests/ suite covers acceptance)"
+else
+  echo "[corpus] OK — every confirmed-packet snapshot still passes"
+fi

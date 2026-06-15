@@ -20,7 +20,7 @@ sift_export() {
       # Each frame is `=== <packet_id> ===` then the packet's bundle, so an operator hands over
       # one file for a whole wave. (Per-packet `sift export <id>` remains the atomic unit.)
       local wid="${2:-}"; [ -n "$wid" ] || { echo "[sift] usage: sift export --wave <wave-id>" >&2; return 1; }
-      local man; man="$(config_path snapshots 2>/dev/null)"; man="$(dirname "$man")/waves/$wid.md"
+      local man; man="$(config_path snapshots 2>/dev/null)"; man="$(dirname "$man")/waves/$wid.json"
       [ -f "$man" ] || { echo "[sift] no wave manifest: $wid" >&2; return 1; }
       echo "[sift] export --wave: per-packet 'sift export <id>' is the verifiable unit; wave bundling is a concatenation of those" >&2
       return 1 ;;
