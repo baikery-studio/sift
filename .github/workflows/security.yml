@@ -1,8 +1,9 @@
 name: security
 
 # Advisory security scanning: CodeQL static analysis (Python helpers) + gitleaks secret
-# scan. Both pinned to commit SHAs. Findings surface in the Security tab; these jobs do not
-# block merges (the required gates are selftest + self-review).
+# scan. CodeQL is pinned to a commit SHA; gitleaks runs the OSS binary pinned by version +
+# sha256 (the gitleaks-action wrapper requires a paid license for org repos). Findings
+# surface in the logs; these jobs do not block merges (required gates are selftest + self-review).
 
 on:
   push:
@@ -38,5 +39,15 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           fetch-depth: 0
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+      - name: gitleaks (OSS binary, version + sha256 pinned)
+        run: |
+          # The gitleaks-action wrapper gates org repos behind a paid license; the OSS binary
+          # does not. Pin the version and verify its checksum, then scan the full git history
+          # using .gitleaks.toml (default ruleset + a narrow allowlist for fake test fixtures).
+          ver=8.30.1
+          sha=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+          curl -sSL -o gl.tgz "https://github.com/gitleaks/gitleaks/releases/download/v${ver}/gitleaks_${ver}_linux_x64.tar.gz"
+          echo "${sha}  gl.tgz" | sha256sum -c -
+          tar -xzf gl.tgz gitleaks
+          ./gitleaks version
+          ./gitleaks git . -c .gitleaks.toml --no-banner --redact --exit-code 1

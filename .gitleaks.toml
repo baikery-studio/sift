@@ -1,0 +1,21 @@
+# gitleaks config for sift-harness.
+#
+# Inherit the full default ruleset (so real credentials are still detected), and allowlist the
+# deliberately FAKE, secret-shaped fixtures the test suite uses to exercise redaction / egress
+# blocking. These are not real credentials: the value is sequential hex (ghp_0123456789...), and
+# the file that carried it (tests/p4-egress.sh) was removed when egress was dropped, so the match
+# survives only in git history. The allowlist is scoped to that exact value + path, so it cannot
+# mask a real token.
+title = "sift-harness"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "fake secret-shaped test fixtures (redaction/egress tests), not real credentials"
+regexes = [
+  '''ghp_0123456789abcdef0123456789abcdefABCD''',
+]
+paths = [
+  '''tests/p4-egress\.sh''',
+]
