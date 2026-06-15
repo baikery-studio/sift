@@ -7,7 +7,7 @@
     {
       "name": "sift-harness",
       "source": "./plugins/sift-harness",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "license": "MIT",
       "description": "plan\u2192execute\u2192review rigor for coding agents: hash-pinned packets, witness-bound confirmation, runtime scope guard, compaction-survival resume."
     }

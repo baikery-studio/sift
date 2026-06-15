@@ -11,7 +11,7 @@ SIFT_REPO_ROOT="$(pwd)" bash <SIFT_HOME>/bin/sift <verb> [args]
 ```
 where `<SIFT_HOME>` is where this plugin is installed/cloned.
 
-Verbs: doctor execute init-claudemd new next plan review + state status verify-log selftest setup wave-review focus packet.
+Verbs: audit doctor drive execute export init-claudemd new next plan review trace w3-verdict + state status verify-log selftest setup wave-review focus packet.
 
 The loop: `packet new` → produce the artifact → `plan` → `execute` → `review` → `confirmed`.
 

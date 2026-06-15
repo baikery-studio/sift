@@ -1,7 +1,7 @@
 ---
 name: sift-workflow
 description: "Use when a coding task warrants rigor, a multi-step change, a fix that must be verified, or anything where you must not declare \"done\" prematurely. Drives the work as a sift packet through plan → execute → review to a witness-bound confirmed, so completion is checked, scoped, and logged rather than asserted."
-version: 0.3.0
+version: 0.4.0
 platforms: [linux, macos, windows]
 metadata:
   hermes:

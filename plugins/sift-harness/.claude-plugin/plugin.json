@@ -1,6 +1,6 @@
 {
   "name": "sift-harness",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Enforces plan→execute→review rigor: every unit of work is a hash-pinned packet driven to a witness-bound confirmed through an append-only tamper-evident log, so agents can't declare premature, unwired, or forged completion.",
   "author": { "name": "sift-harness contributors" },
   "license": "MIT",
