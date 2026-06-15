@@ -12,4 +12,4 @@ labels: bug
 
 **Environment:** OS, bash version (`bash --version`), how sift was installed (plugin / `bin/sift`).
 
-**Note:** for a security issue, do NOT file here — see SECURITY.md for the private channel.
+**Note:** for a security issue, do NOT file here; see SECURITY.md for the private channel.

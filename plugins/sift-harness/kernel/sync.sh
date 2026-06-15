@@ -24,11 +24,11 @@ _desc()  { sed -n 's/^description: *//p' "$ROOT/commands/sift-$1.md" 2>/dev/null
 _agents_md() {
   local host="$1"
   cat <<EOF
-# sift-harness — $host adapter
+# sift-harness: $host adapter
 
 sift-harness enforces **plan → execute → review** rigor: every unit of work is a
 hash-pinned *packet* driven to a witness-bound \`confirmed\` through an append-only,
-tamper-evident log — so an agent can't declare work premature, unwired, or forged.
+tamper-evident log, so an agent can't declare work premature, unwired, or forged.
 
 The engine is host-agnostic. From this repo, drive it with \`bin/sift\`:
 
@@ -78,7 +78,7 @@ _sync_codex() {
 {
   "name": "sift-harness",
   "version": "$VER",
-  "description": "plan→execute→review rigor for Codex CLI: hash-pinned packets, witness-bound confirmation, compaction-survival resume (scope guard is advisory on Codex — no PreToolUse hook).",
+  "description": "plan→execute→review rigor for Codex CLI: hash-pinned packets, witness-bound confirmation, compaction-survival resume (scope guard is advisory on Codex: no PreToolUse hook).",
   "license": "MIT",
   "keywords": ["codex", "harness", "verification", "plan-work-review"],
   "skills": "../skills/",

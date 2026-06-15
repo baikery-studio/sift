@@ -2,7 +2,7 @@
 
 A minimal adapter so [Aider](https://aider.chat) sessions drive sift-harness. Aider has
 no hook lifecycle, so this is the **trust-core-only** path: no live scope guard, no
-un-endable turn — but a `confirmed` is still witness-bound and a forged log still replays
+un-endable turn, but a `confirmed` is still witness-bound and a forged log still replays
 as `corrupt`. That is the guarantee that travels to every host.
 
 ## Wire it
@@ -15,7 +15,7 @@ as `corrupt`. That is the guarantee that travels to every host.
    aider --read adapters/aider/AGENTS.md
    ```
 
-2. Drive the loop with the bare CLI (`bin/sift`) exactly as `AGENTS.md` describes —
+2. Drive the loop with the bare CLI (`bin/sift`) exactly as `AGENTS.md` describes:
    `setup → packet new → plan → execute → commit → review → confirmed`.
 
 ## What travels vs what doesn't

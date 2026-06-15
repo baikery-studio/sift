@@ -1,4 +1,4 @@
-# sift-harness — standing rule for Aider
+# sift-harness: standing rule for Aider
 
 Aider reads `AGENTS.md` (and `CONVENTIONS.md`) as project context. Place this rule in
 the repo (or point Aider at it) so an Aider-driven session uses the harness.

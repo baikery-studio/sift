@@ -1,4 +1,4 @@
-# sift audit — second-party replay-verification
+# sift audit: second-party replay-verification
 
 `sift audit <packet_id>` lets a party who did **not** build the work verify a
 `confirmed` claim from the repo plus the retained trust artifacts (the hash-chained log
@@ -6,7 +6,7 @@ and the witness reviews). It is the capability the architecture is closest to se
 (regulated / multi-party hand-off) and the one a self-asserted "done" cannot offer.
 
 Note that `.harness/log.jsonl` and `.harness/reviews/` are gitignored by default, so a
-plain `git clone` does **not** carry them. Audit is not "from a bare clone" — the
+plain `git clone` does **not** carry them. Audit is not "from a bare clone"; the
 operator must ship or retain those artifacts (see *What a second party needs*).
 
 ## What it checks
@@ -14,14 +14,14 @@ operator must ship or retain those artifacts (see *What a second party needs*).
 Given only the repo + `.harness/log.jsonl` + `.harness/reviews/`, audit runs three
 independent checks and prints a structured verdict:
 
-1. **Chain** — `verify-log` re-derives every `event_hash` and the `prev_hash`/`seq`
+1. **Chain**: `verify-log` re-derives every `event_hash` and the `prev_hash`/`seq`
    linkage. Any edit, insert, reorder, or delete fails here (exit ≠ 0). A
    schema-too-old log is reported distinctly (run `sift migrate-log`).
-2. **Replay** — `project_state` replays the packet's transitions and returns a
+2. **Replay**: `project_state` replays the packet's transitions and returns a
    witness-bound terminal only if the terminal event is bound to a prior, in-chain
    `review.verdict` whose verdict is `pass`, with matching `feature_sha` and witness
    hashes. A witnessless or forged terminal replays as `corrupt` and fails here.
-3. **Artifacts** — each bound `w2_hash` / `w3_hash` / `w4_hash` is recomputed from the
+3. **Artifacts**: each bound `w2_hash` / `w3_hash` / `w4_hash` is recomputed from the
    on-disk `.w2.json` / `.w3.json` / `.w4.json` and compared to the value in the
    terminal event. A missing artifact (MISSING) or a content-swapped one (TAMPERED)
    fails here.
@@ -88,7 +88,7 @@ attestation:
   confirmed). Keyless stays the default: no `--sign` means exactly the tamper-evident behaviour,
   and an unsigned confirmed still audits PASS.
 
-The honest bound: signed = cryptographically attested by the keyholder (a party distinct from
+The bound: signed = cryptographically attested by the keyholder (a party distinct from
 the worker-agent that produced the diff); unsigned = tamper-evident only.
 
 ## Provenance

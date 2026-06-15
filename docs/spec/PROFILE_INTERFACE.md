@@ -34,7 +34,7 @@ The set overloads a few words; these are the canonical meanings.
   diff passes; a malformed one rejects), then writes the fresh W3 artifact. No model
   API, no network, no keys. The verdict parser is injection-resistant (more than one
   embedded verdict fails closed). A `confirmed` under W3 means "structurally reviewed,"
-  not "a model judged the code" — the deterministic quartet (W1/W2/scope-guard/W4)
+  not "a model judged the code"; the deterministic quartet (W1/W2/scope-guard/W4)
   carries the real weight, and under Claude Code the driving agent is the model that
   reviews the diff.
   - **Host-verdict mode** (opt-in, still keyless and zero egress): instead of minting its
@@ -113,7 +113,7 @@ blocked            → packeted              [planner]    # replan
 any                → superseded            [operator]   # emits lane.transition event
 ```
 
-Two changes from the inherited sift machine, both adopted now (gold standard):
+Two changes from the inherited sift machine, both adopted now:
 - **`reviewing` is wired live.** `kernel/pipeline.sh` (`sift_review`) emits `acceptance_met→reviewing`
   before running witnesses, and `reviewing→{confirmed,partially_confirmed,
   review_failed}` after. "In Review" then truthfully means *witnesses running*.

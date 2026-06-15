@@ -39,7 +39,7 @@ opencode / Codex / Aider / your-own-CLI rows reduce to this same bare-shell driv
 bare-shell observation covers them; their thin adapters only change discovery, not the
 engine. The Claude Code hook lifecycle below is the part that is Claude-Code-only.
 
-**What travels (every host):** the witness-bound trust core — hash-chained log, causal
+**What travels (every host):** the witness-bound trust core: hash-chained log, causal
 replay, `confirmed`/`partially_confirmed` integrity, and `sift audit`. **What is
 Claude-Code-only:** the runtime hooks (PreToolUse scope guard, Stop gate); on other hosts
 they degrade to guidance while the trust core does not.

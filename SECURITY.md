@@ -88,7 +88,7 @@ and prefer a container (or a throwaway VM / `env -i` minimal environment) for un
 | Completion log | tamper-evident (detectable), no secret key |
 | Scope guard | advisory, host-hook enforced, fails closed |
 | Deny layer | advisory host permissions (deny destructive Bash + secret read/write + metadata/paste egress), not a sandbox |
-| Network egress | none — sift makes no network calls; W3 review is keyless and local |
+| Network egress | none. sift makes no network calls; W3 review is keyless and local |
 | Execution | host shell/Python, unsandboxed without Docker |
 
 The point is disclosure over assertion. Use it for process rigor, not as a security boundary.

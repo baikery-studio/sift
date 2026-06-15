@@ -11,4 +11,4 @@
 - [ ] No doc/README claim outlives its implementation
 
 ## Notes
-<!-- anything reviewers should know; advisory limits stated honestly -->
+<!-- anything reviewers should know; advisory limits stated plainly -->
