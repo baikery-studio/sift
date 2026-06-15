@@ -31,7 +31,7 @@ print(" ".join(m))' "$man")" || { echo "[sift] malformed/empty wave manifest: $w
   for m in $members; do
     st="$(project_state "$m")"
     case "$st" in
-      confirmed|superseded) continue ;;                      # done / retired — skip
+      confirmed|partially_confirmed|superseded) continue ;; # done (incl. soft-floor cap) / retired — skip
       corrupt) echo "[sift] $m: log corrupt — refusing to emit a resume target (run: sift verify-log)" >&2; return 3 ;;
       *) printf '%s\n' "$m"; return 0 ;;
     esac

@@ -61,10 +61,15 @@ sift_wave_review() {
   touched="$(python3 -c 'import json,sys;print(" ".join(json.load(open(sys.argv[1])).get("touched_files",[])))' "$man")"
   e2e="$(python3 -c 'import json,sys;print(" ".join(json.load(open(sys.argv[1])).get("e2e",[])))' "$man")"
 
-  # gate_ready: every member confirmed
+  # gate_ready: every member reached a witness-bound terminal. partially_confirmed is a real
+  # W3 verdict capped by an operator-acknowledged soft_floor (audit/doctor treat it as terminal
+  # too), so it counts as done for the wave — otherwise one soft-floored member could never ship.
   local m
   for m in $members; do
-    [ "$(project_state "$m")" = confirmed ] || { echo "[w5] not gate_ready: $m is $(project_state "$m")" >&2; return 1; }
+    case "$(project_state "$m")" in
+      confirmed|partially_confirmed) ;;
+      *) echo "[w5] not gate_ready: $m is $(project_state "$m")" >&2; return 1 ;;
+    esac
   done
   # R1 cross-packet wiring — resolve each member's W4 from ITS OWN profile.
   local prof w4
